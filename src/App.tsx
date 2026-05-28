@@ -16,12 +16,27 @@ globalAudio.addEventListener('error', () => {
   }
 });
 
+// Check if accessing admin route
+function isAdminRoute(): boolean {
+  const pathname = window.location.pathname;
+  const hash = window.location.hash;
+  const isAdminPath = pathname === '/admin' || pathname.endsWith('/admin');
+  const isAdminHash = hash === '#admin';
+  console.log('Route check:', { pathname, hash, isAdminPath, isAdminHash });
+  return isAdminPath || isAdminHash;
+}
+
 export default function App() {
   const [showMain, setShowMain] = useState(() => {
-    if (window.location.pathname === '/admin' || window.location.hash === '#admin') return true;
+    const adminRoute = isAdminRoute();
+    if (adminRoute) return true;
     return localStorage.getItem('chaarYaarSequenceDone') === 'true';
   });
-  const [adminOpen, setAdminOpen] = useState(() => window.location.pathname === '/admin');
+  
+  const [adminOpen, setAdminOpen] = useState(() => {
+    return isAdminRoute();
+  });
+  
   const [adminTaps, setAdminTaps] = useState(0);
 
   const playAudio = useCallback((forceRestart = false, timestamp = 0) => {
@@ -38,14 +53,21 @@ export default function App() {
 
   useEffect(() => {
     const checkAdminRoute = () => {
-      if (window.location.pathname === '/admin' || window.location.hash === '#admin') {
+      if (isAdminRoute()) {
+        console.log('Admin route detected, opening admin panel');
         setShowMain(true);
         setAdminOpen(true);
+      } else {
+        setAdminOpen(false);
       }
     };
     
+    // Check on mount
     checkAdminRoute();
+    
+    // Listen for route changes
     window.addEventListener('popstate', checkAdminRoute);
+    window.addEventListener('hashchange', checkAdminRoute);
     
     // Initialize theme from storage
     const savedTheme = localStorage.getItem('chaarYaarTheme');
@@ -68,6 +90,7 @@ export default function App() {
     
     return () => {
       window.removeEventListener('popstate', checkAdminRoute);
+      window.removeEventListener('hashchange', checkAdminRoute);
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('themeUpdated', handleStorage);
     };
@@ -107,6 +130,7 @@ export default function App() {
              </button>
           </div>
           
+          {/* Admin Panel - Always rendered when adminOpen is true */}
           <AdminPanel isOpen={adminOpen} onClose={() => setAdminOpen(false)} />
         </>
       )}
