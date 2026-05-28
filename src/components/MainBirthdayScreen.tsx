@@ -34,22 +34,36 @@ export default function MainBirthdayScreen({ adminOpen, onPlayAudio }: { adminOp
   });
   const [glitchTime, setGlitchTime] = useState(0);
 
+  // Load initial config from API if available (for server-side deployment)
   useEffect(() => {
     fetch('/api/config')
       .then(r => r.json())
       .then(data => {
-        setPerson(data.person);
-        setSenders(data.senders);
-        localStorage.setItem('chaarYaarPerson', JSON.stringify(data.person));
-        localStorage.setItem('chaarYaarSenders', JSON.stringify(data.senders));
-        localStorage.setItem('chaarYaarTheme', data.theme);
-        if (data.theme === 'retro') {
-          document.documentElement.setAttribute('data-theme', 'retro');
-        } else {
-          document.documentElement.removeAttribute('data-theme');
+        if (data.person) {
+          setPerson(data.person);
+          localStorage.setItem('chaarYaarPerson', JSON.stringify(data.person));
+        }
+        if (data.senders) {
+          setSenders(data.senders);
+          localStorage.setItem('chaarYaarSenders', JSON.stringify(data.senders));
+        }
+        if (data.polaroids) {
+          setPolaroids(data.polaroids);
+          localStorage.setItem('chaarYaarPolaroids', JSON.stringify(data.polaroids));
+        }
+        if (data.theme) {
+          localStorage.setItem('chaarYaarTheme', data.theme);
+          if (data.theme === 'retro') {
+            document.documentElement.setAttribute('data-theme', 'retro');
+          } else {
+            document.documentElement.removeAttribute('data-theme');
+          }
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        // API not available - that's fine, we'll use localStorage defaults
+        console.debug('API config endpoint not available (expected for static deployments)');
+      });
   }, []);
 
   // Subscribe to global state changes for real-time sync
@@ -169,7 +183,7 @@ export default function MainBirthdayScreen({ adminOpen, onPlayAudio }: { adminOp
                  ]
              }}
              transition={{ duration: 0.3, repeat: Infinity, repeatType: "mirror" }}
-             className="relative z-10 flex flex-col items-center justify-center text-center p-8 border border-red-500/50 shadow-[0_0_100px_rgba(239,68,68,0.5)] bg-black/60 backdrop-blur-md rounded-2xl max-w-2xl mx-4"
+             className="relative z-10 flex flex-col items-center justify-center text-center p-8 border border-red-500/50 shadow-[0_0_100px_rgba(239,68,68,0.5)] bg-black/60 backdrop-blur-md rounded-2xl"
           >
             <AlertTriangle className="w-20 h-20 text-red-500 mb-6 drop-shadow-[0_0_15px_rgba(239,68,68,0.8)]" />
             <h1 className="text-4xl md:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-500 to-yellow-500 uppercase tracking-widest break-all mb-4">
@@ -221,7 +235,7 @@ export default function MainBirthdayScreen({ adminOpen, onPlayAudio }: { adminOp
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ delay: 1, duration: 1 }}
-                  className="inline-block px-5 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-cyan-300 font-mono tracking-widest uppercase mb-6 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2)]"
+                  className="inline-block px-5 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs md:text-sm text-cyan-300 font-mono tracking-widest uppercase mb-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]"
                 >
                   ⭐ {person.birthDate} ⭐
                 </motion.div>
@@ -264,7 +278,7 @@ export default function MainBirthdayScreen({ adminOpen, onPlayAudio }: { adminOp
                   transition={{ duration: 0.6, delay: 1.5 + (idx * 0.2) }}
                 >
                   <div className="h-full relative overflow-hidden rounded-2xl glass-panel p-6 hover:bg-white/[0.05] transition-all duration-300 group shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500/0 via-cyan-400/80 to-fuchsia-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-500/0 via-cyan-400/80 to-fuchsia-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
                     
                     <h4 className="text-lg font-bold text-white tracking-wide mb-4 flex items-center justify-between">
                       {sender.name}
@@ -272,7 +286,7 @@ export default function MainBirthdayScreen({ adminOpen, onPlayAudio }: { adminOp
                     </h4>
                     
                     {sender.special === 'CS' ? (
-                      <div className="font-mono text-green-400 bg-black/80 p-4 rounded-lg text-xs w-full shadow-[inset_0_0_15px_rgba(0,0,0,1)] border border-green-500/20 leading-relaxed group-hover:text-green-300 transition-colors">
+                      <div className="font-mono text-green-400 bg-black/80 p-4 rounded-lg text-xs w-full shadow-[inset_0_0_15px_rgba(0,0,0,1)] border border-green-500/20 leading-relaxed group-hover:shadow-[inset_0_0_20px_rgba(34,197,94,0.1)] transition-shadow">
                         <div className="text-slate-500 mb-1"># root@chaar-yaar:~</div>
                         <span className="text-slate-500">$</span> {sender.message.split('\n')[0]}
                         {sender.message.split('\n')[1] && (
