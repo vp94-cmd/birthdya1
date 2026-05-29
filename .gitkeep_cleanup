@@ -1,0 +1,3 @@
+# This file is a placeholder to create a valid commit
+# The actual changes are deletions of outdated files
+# Git doesn't allow empty commits, so this marker file ensures the commit succeeds
