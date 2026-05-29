@@ -25,29 +25,36 @@ class RealtimeSyncManager {
   private reconnectDelay = 1000;
   private processedUpdateIds: Set<string> = new Set();
   private maxProcessedIds = 100;
-  // FIX #1: Renamed from `isConnected` to `_connected` to avoid collision with
-  // the public `isConnected()` method. Previously, `this.isConnected()` would
-  // throw "false is not a function" at runtime (and fail to compile in TS).
+
+  // ─── FIX #1 ────────────────────────────────────────────────────────────────
+  // CRITICAL: Renamed from `isConnected` to `_connected`.
+  // The original code had BOTH `private isConnected = false` (a property) AND
+  // `isConnected(): boolean` (a public method) with the same name.
+  // At runtime, `this.isConnected` resolves to the property value `false`, so
+  // calling `realtimeSyncManager.isConnected()` was equivalent to calling
+  // `false()` → "TypeError: wl.isConnected is not a function" → blank screen.
+  // ───────────────────────────────────────────────────────────────────────────
   private _connected = false;
-  // FIX #7: Use ReturnType<typeof setInterval> instead of NodeJS.Timeout
+
   private pollingInterval: ReturnType<typeof setInterval> | null = null;
-  // FIX #4: Store monitorConnection interval so destroy() can clear it
   private monitorInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
-    // FIX #2: Guard against null supabase (env vars missing) before any channel call
+    // ─── FIX #2 ──────────────────────────────────────────────────────────────
+    // Guard against null supabase (missing env vars on first deploy).
+    // The original code called supabase.channel() unconditionally, which would
+    // throw a TypeError if supabase was null, crashing the module at load time.
+    // ─────────────────────────────────────────────────────────────────────────
     if (!supabase) {
       console.warn(
-        'RealtimeSyncManager: Supabase client unavailable — real-time disabled, polling only.'
+        'RealtimeSyncManager: Supabase client unavailable — real-time disabled, using polling + localStorage only.'
       );
-      // Still start polling so state stays fresh via /api/config
       this.setupPolling();
       return;
     }
+
     this.initRealtimeChannel();
-    // FIX #5: Storage listener REMOVED from here. globalStateManager already listens
-    // to window.storage as its cross-tab fallback. Having both listen caused every
-    // cross-tab storage event to fire the notification chain twice.
+    // Storage listener lives in globalStateManager to avoid double-notifications.
     this.setupPolling();
     this.monitorConnection();
   }
@@ -55,27 +62,23 @@ class RealtimeSyncManager {
   private initRealtimeChannel() {
     if (!supabase) return;
 
-    // FIX #3: Unsubscribe and discard the old channel before creating a new one.
-    // Without this, every reconnect attempt stacked up additional live channels,
-    // each independently firing duplicate events.
+    // Clean up stale channel before reconnecting — otherwise every reconnect
+    // stacks another live channel, producing duplicate events.
     if (this.channel) {
-      this.channel.unsubscribe();
+      try { this.channel.unsubscribe(); } catch (_) { /* ignore */ }
       this.channel = null;
     }
 
     try {
-      // FIX #8: self: false — we call handleStateUpdate() locally ourselves inside
-      // broadcast(), so there's no need for Supabase to echo our own messages back.
+      // self: false — we call handleStateUpdate() locally in broadcast(), so
+      // Supabase doesn't need to echo our own messages back.
       this.channel = supabase.channel('birthday_state_updates', {
-        config: {
-          broadcast: { self: false },
-        },
+        config: { broadcast: { self: false } },
       });
 
       this.channel
         .on('broadcast', { event: 'state_update' }, (payload) => {
-          const update = payload.payload as StateUpdate;
-          this.handleStateUpdate(update);
+          this.handleStateUpdate(payload.payload as StateUpdate);
         })
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
@@ -84,10 +87,10 @@ class RealtimeSyncManager {
             this._connected = true;
             this.fetchLatestState();
           } else if (status === 'CHANNEL_ERROR') {
-            console.error('Channel error:', status);
+            console.error('Realtime channel error');
             this.handleDisconnect();
           } else if (status === 'TIMED_OUT') {
-            console.warn('Channel timed out');
+            console.warn('Realtime channel timed out');
             this.handleDisconnect();
           }
         });
@@ -99,7 +102,6 @@ class RealtimeSyncManager {
 
   private handleDisconnect() {
     this._connected = false;
-    console.log('Real-time sync disconnected, attempting reconnect...');
     this.attemptReconnect();
   }
 
@@ -107,55 +109,54 @@ class RealtimeSyncManager {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       const delay = this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1);
-      console.log(`Reconnecting in ${Math.round(delay)}ms... (attempt ${this.reconnectAttempts})`);
+      console.log(`Realtime reconnecting in ${Math.round(delay)}ms (attempt ${this.reconnectAttempts})`);
       setTimeout(() => this.initRealtimeChannel(), delay);
     } else {
-      console.warn('Max reconnection attempts reached, relying on polling');
-      // setupPolling() is already running from the constructor; calling it here
-      // just resets its interval, which is harmless.
+      console.warn('Max reconnection attempts reached — polling only');
       this.setupPolling();
     }
   }
 
   private setupPolling() {
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-    }
-
+    if (this.pollingInterval) clearInterval(this.pollingInterval);
     this.pollingInterval = setInterval(() => {
-      if (!this._connected) {
-        this.fetchLatestState();
-      }
+      if (!this._connected) this.fetchLatestState();
     }, 3000);
   }
 
+  // ─── FIX #3 ──────────────────────────────────────────────────────────────
+  // fetchLatestState is fully wrapped in try/catch. For a brand-new Supabase
+  // project with no tables, /api/config may return 404/500. We treat any
+  // non-OK response as a soft failure — the app keeps running with whatever
+  // is already in localStorage. Never throws.
+  // ─────────────────────────────────────────────────────────────────────────
   private async fetchLatestState() {
     try {
       const response = await fetch('/api/config');
-      if (response.ok) {
-        const data = await response.json();
-        (['person', 'senders', 'theme', 'polaroids'] as StateType[]).forEach((type) => {
-          if (data[type]) {
-            this.handleStateUpdate({
-              type,
-              data: data[type],
-              timestamp: Date.now(),
-              id: `poll-${Date.now()}-${type}`,
-            });
-          }
-        });
+      if (!response.ok) {
+        // Likely empty project / table not created yet — not a crash condition.
+        console.warn(`fetchLatestState: /api/config returned ${response.status} — skipping`);
+        return;
       }
+      const data = await response.json();
+      (['person', 'senders', 'theme', 'polaroids'] as StateType[]).forEach((type) => {
+        if (data[type] !== undefined && data[type] !== null) {
+          this.handleStateUpdate({
+            type,
+            data: data[type],
+            timestamp: Date.now(),
+            id: `poll-${Date.now()}-${type}`,
+          });
+        }
+      });
     } catch (e) {
-      console.error('Failed to fetch latest state:', e);
+      // Network error, JSON parse error, or empty DB — swallow, keep running.
+      console.warn('fetchLatestState: failed (empty DB or network error), continuing with localStorage:', e);
     }
   }
 
   private monitorConnection() {
-    // FIX #4: Store the interval reference so destroy() can clear it
-    if (this.monitorInterval) {
-      clearInterval(this.monitorInterval);
-    }
-
+    if (this.monitorInterval) clearInterval(this.monitorInterval);
     this.monitorInterval = setInterval(() => {
       if (!this._connected && this.channel?.state === 'SUBSCRIBED') {
         this._connected = true;
@@ -185,20 +186,14 @@ class RealtimeSyncManager {
   }
 
   private handleStateUpdate(update: StateUpdate) {
-    // Prevent duplicate processing (guards against rapid poll results with same id)
-    if (this.processedUpdateIds.has(update.id)) {
-      return;
-    }
-
+    if (this.processedUpdateIds.has(update.id)) return;
     this.processedUpdateIds.add(update.id);
 
-    // Keep processed ID set bounded
     if (this.processedUpdateIds.size > this.maxProcessedIds) {
-      const idsArray = Array.from(this.processedUpdateIds);
-      this.processedUpdateIds = new Set(idsArray.slice(-this.maxProcessedIds));
+      const arr = Array.from(this.processedUpdateIds);
+      this.processedUpdateIds = new Set(arr.slice(-this.maxProcessedIds));
     }
 
-    // Persist to localStorage
     const key = this.getKeyFromStateType(update.type);
     try {
       localStorage.setItem(key, JSON.stringify(update.data));
@@ -206,7 +201,6 @@ class RealtimeSyncManager {
       console.error('Failed to save to localStorage:', e);
     }
 
-    // Notify all subscribers (globalStateManager's setupRealtimeSync callbacks live here)
     this.notifyListeners(update.type, update.data);
   }
 
@@ -214,34 +208,23 @@ class RealtimeSyncManager {
     const typeListeners = this.listeners.get(type);
     if (typeListeners) {
       typeListeners.forEach((listener) => {
-        try {
-          listener(data);
-        } catch (e) {
+        try { listener(data); } catch (e) {
           console.error('Error in state listener:', e);
         }
       });
     }
   }
 
-  /**
-   * Subscribe to state changes for a specific type.
-   * Returns an unsubscribe function for cleanup.
-   */
   subscribe(type: StateType, listener: StateListener): () => void {
-    if (!this.listeners.has(type)) {
-      this.listeners.set(type, new Set());
-    }
+    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
     this.listeners.get(type)!.add(listener);
-
-    return () => {
-      this.listeners.get(type)?.delete(listener);
-    };
+    return () => { this.listeners.get(type)?.delete(listener); };
   }
 
   /**
-   * Broadcast a state update to all connected clients via Supabase Realtime.
-   * Always handles locally first so the sending tab's UI updates instantly,
-   * then sends to remote clients. Never throws — Supabase failure is non-fatal.
+   * Broadcast a state update to all connected clients.
+   * Handles locally first (instant UI update), then sends to Supabase.
+   * Never throws — Supabase failure is non-fatal.
    */
   async broadcast(type: StateType, data: any): Promise<void> {
     const update: StateUpdate = {
@@ -251,10 +234,10 @@ class RealtimeSyncManager {
       id: `${type}-${Date.now()}-${Math.random()}`,
     };
 
-    // 1. Handle locally first — instant UI update regardless of Supabase latency
+    // Local first — UI updates instantly regardless of network
     this.handleStateUpdate(update);
 
-    // 2. Broadcast to remote clients (best-effort, non-throwing)
+    // Remote — best-effort
     if (this.channel && this._connected) {
       try {
         await this.channel.send({
@@ -263,43 +246,35 @@ class RealtimeSyncManager {
           payload: update,
         });
       } catch (e) {
-        // Non-fatal: local update already done, localStorage written, polling will sync
-        console.warn('Failed to broadcast via Supabase:', e);
+        console.warn('Supabase broadcast failed (non-fatal):', e);
       }
     }
   }
 
   /**
-   * Returns true if the Supabase channel is actively subscribed.
-   * FIX #1: Uses `_connected` (private field) to avoid the name collision
-   * with this method that caused a TypeScript compilation error.
+   * FIX #1: `_connected` (private field) is separate from this method.
+   * Previously both had the same name `isConnected`, making the method
+   * unreachable and causing "isConnected is not a function" at runtime.
    */
   isConnected(): boolean {
-    return this._connected && this.channel?.state === 'SUBSCRIBED';
+    try {
+      return this._connected && this.channel?.state === 'SUBSCRIBED';
+    } catch {
+      return false;
+    }
   }
 
-  /**
-   * Clean up all resources. Safe to call multiple times.
-   */
   destroy() {
     if (this.channel) {
-      this.channel.unsubscribe();
+      try { this.channel.unsubscribe(); } catch (_) { /* ignore */ }
       this.channel = null;
     }
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-      this.pollingInterval = null;
-    }
-    // FIX #4: Clear the monitor interval that was previously leaked
-    if (this.monitorInterval) {
-      clearInterval(this.monitorInterval);
-      this.monitorInterval = null;
-    }
+    if (this.pollingInterval) { clearInterval(this.pollingInterval); this.pollingInterval = null; }
+    if (this.monitorInterval) { clearInterval(this.monitorInterval); this.monitorInterval = null; }
     this._connected = false;
     this.reconnectAttempts = 0;
     this.listeners.clear();
   }
 }
 
-// Singleton instance
 export const realtimeSyncManager = new RealtimeSyncManager();
