@@ -71,16 +71,16 @@ function PolaroidCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: -600, scale: 1.5, rotate: (Math.random() - 0.5) * 60 }}
+      initial={{ opacity: 0, y: '-100vh', scale: 1.3, rotate: (Math.random() - 0.5) * 60 }}
       animate={
         isInView
           ? { opacity: opacityVal, y: yOffset, scale: scaleOffset, rotate: rotateOffset, x: 0, zIndex: zIndexVal }
-          : { opacity: 0, y: -600, scale: 1.5, rotate: rotateOffset, x: 0, zIndex: zIndexVal }
+          : { opacity: 0, y: '-100vh', scale: 1.3, rotate: rotateOffset, x: 0, zIndex: zIndexVal }
       }
       transition={{
-        duration: isSelected ? 0.4 : 0.8,
-        delay: (!hasEntered && isInView && !isSelected) ? 0.2 + index * 0.15 : 0,
-        type: 'spring', bounce: 0.3, restDelta: 0.001
+        duration: isSelected ? 0.4 : 0.9,
+        delay: (!hasEntered && isInView && !isSelected) ? 0.1 + index * 0.18 : 0,
+        type: 'spring', bounce: 0.35, restDelta: 0.001
       }}
       style={{ position: 'absolute', transformOrigin: 'bottom center' }}
       className="pointer-events-auto"
@@ -173,7 +173,7 @@ export default function PolaroidPile({ images }: { images: PolaroidImage[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [hasEntered, setHasEntered] = useState(false);
-  const isInView = useInView(containerRef, { once: true, margin: '20%' });
+  const isInView = useInView(containerRef, { once: true, margin: '-5% 0px -5% 0px' });
   const dragProgress = useMotionValue(0);
   const [stack, setStack] = useState<PolaroidImage[]>([]);
 
