@@ -30,6 +30,9 @@ function PolaroidCard({
   const visualIndex = stackLength - 1 - index;
   const [isFlipped, setIsFlipped] = useState(false);
 
+  // Stable random rotate so it doesn't re-randomise on every render
+  const initialRotate = useRef((Math.random() - 0.5) * 60).current;
+
   const yOffset    = isSelected ? 0 : visualIndex * 15;
   const rotateOffset = isSelected ? 0 : (visualIndex % 2 === 0 ? -1 : 1) * visualIndex * 3;
   const scaleOffset  = isSelected ? 1.25 : Math.max(0.8, 1 - visualIndex * 0.05);
@@ -71,16 +74,16 @@ function PolaroidCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: '-100vh', scale: 1.3, rotate: (Math.random() - 0.5) * 60 }}
+      initial={{ opacity: 0, y: -900, scale: 1.3, rotate: initialRotate }}
       animate={
         isInView
           ? { opacity: opacityVal, y: yOffset, scale: scaleOffset, rotate: rotateOffset, x: 0, zIndex: zIndexVal }
-          : { opacity: 0, y: '-100vh', scale: 1.3, rotate: rotateOffset, x: 0, zIndex: zIndexVal }
+          : { opacity: 0, y: -900, scale: 1.3, rotate: initialRotate, x: 0, zIndex: zIndexVal }
       }
       transition={{
-        duration: isSelected ? 0.4 : 0.9,
-        delay: (!hasEntered && isInView && !isSelected) ? 0.1 + index * 0.18 : 0,
-        type: 'spring', bounce: 0.35, restDelta: 0.001
+        duration: isSelected ? 0.4 : 1.1,
+        delay: (!hasEntered && isInView && !isSelected) ? 0.1 + visualIndex * 0.15 : 0,
+        type: 'spring', bounce: 0.4, restDelta: 0.001
       }}
       style={{ position: 'absolute', transformOrigin: 'bottom center' }}
       className="pointer-events-auto"
