@@ -59,8 +59,7 @@ export default function MainBirthdayScreen({ adminOpen, onPlayAudio }: { adminOp
     if (navigator.share) {
       navigator.share({ title: "Happy Birthday " + person.name + "!", text, url }).catch(() => {});
     } else {
-      window.open("https://wa.me/?text=" + encodeURIComponent(text + "
-" + url), "_blank");
+      window.open("https://wa.me/?text=" + encodeURIComponent(text + "\n" + url), "_blank");
     }
   };
 
