@@ -133,7 +133,15 @@ class RealtimeSyncManager {
             id: `db-fetch-${Date.now()}-${type}`,
           });
         } catch (e) {
-          console.warn(`fetchLatestState: could not parse "${type}":`, e);
+          // JSON.parse fails for plain strings like theme: 'classic' (stored without JSON.stringify).
+          // Fall back to the raw value so theme is applied instead of being silently dropped.
+          console.warn(`fetchLatestState: "${type}" is not valid JSON — using raw value.`, e);
+          this.handleStateUpdate({
+            type,
+            data: raw,
+            timestamp: Date.now(),
+            id: `db-fetch-fallback-${Date.now()}-${type}`,
+          });
         }
       });
     } catch (e) {
