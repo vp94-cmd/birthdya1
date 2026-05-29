@@ -72,31 +72,31 @@ export default function AdminPanel({ isOpen, onClose }: { isOpen: boolean, onClo
     setSaveStatus('saving');
     
     try {
-      // Save to localStorage first
+      const config = { person, senders, theme, polaroids };
+
+      // 1. Save to localStorage immediately (instant local update)
       localStorage.setItem('chaarYaarPerson', JSON.stringify(person));
       localStorage.setItem('chaarYaarSenders', JSON.stringify(senders));
       localStorage.setItem('chaarYaarTheme', theme);
       localStorage.setItem('chaarYaarPolaroids', JSON.stringify(polaroids));
+
+      // 2. Persist to Netlify DB via API function (survives page refresh for all users)
+      await fetch('/api/config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
+      });
+
+      // 3. Broadcast + DB save via globalStateManager (handles Supabase realtime + DB)
+      await globalStateManager.saveConfig(config);
       
-      // Broadcast all state changes globally via Supabase Realtime
-      await Promise.all([
-        globalStateManager.broadcast('person', person),
-        globalStateManager.broadcast('senders', senders),
-        globalStateManager.broadcast('theme', theme),
-        globalStateManager.broadcast('polaroids', polaroids),
-      ]);
-      
-      // Also dispatch custom events for backward compatibility
+      // 4. Dispatch custom events for backward compatibility
       window.dispatchEvent(new Event('friendsUpdated'));
       window.dispatchEvent(new Event('themeUpdated'));
       window.dispatchEvent(new Event('polaroidsUpdated'));
       
-      // Simulate save completion
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
       setSaveStatus('saved');
       
-      // Reset status and close panel after delay
       setTimeout(() => {
         setSaveStatus('idle');
         onClose();
