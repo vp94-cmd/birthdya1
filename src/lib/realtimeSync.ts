@@ -1,9 +1,3 @@
-/**
- * Real-Time Sync Manager using Supabase Realtime
- * Handles instant global state synchronization across all clients
- * When admin saves changes, all active users receive updates without page refresh
- */
-
 import { supabase } from './supabaseClient';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
@@ -25,37 +19,43 @@ class RealtimeSyncManager {
   private reconnectDelay = 1000;
   private processedUpdateIds: Set<string> = new Set();
   private maxProcessedIds = 100;
-  private isConnected = false;
-  private pollingInterval: NodeJS.Timeout | null = null;
+  private _connected = false;
+  private pollingInterval: ReturnType<typeof setInterval> | null = null;
+  private monitorInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
+    if (!supabase) {
+      console.warn('RealtimeSyncManager: Supabase unavailable — polling only.');
+      this.setupPolling();
+      return;
+    }
     this.initRealtimeChannel();
-    this.setupFallbacks();
+    this.setupPolling();
     this.monitorConnection();
   }
 
   private initRealtimeChannel() {
+    if (!supabase) return;
+    if (this.channel) {
+      try { this.channel.unsubscribe(); } catch (_) {}
+      this.channel = null;
+    }
     try {
-      // Subscribe to a broadcast channel for all state updates
       this.channel = supabase.channel('birthday_state_updates', {
-        config: {
-          broadcast: { self: true },
-        },
+        config: { broadcast: { self: false } },
       });
-
       this.channel
         .on('broadcast', { event: 'state_update' }, (payload) => {
-          const update = payload.payload as StateUpdate;
-          this.handleStateUpdate(update);
+          this.handleStateUpdate(payload.payload as StateUpdate);
         })
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
             console.log('✅ Supabase Real-time connected');
             this.reconnectAttempts = 0;
-            this.isConnected = true;
-            this.fetchLatestState(); // Get current state on connect
+            this._connected = true;
+            this.fetchLatestState();
           } else if (status === 'CHANNEL_ERROR') {
-            console.error('Channel error:', status);
+            console.error('Channel error');
             this.handleDisconnect();
           } else if (status === 'TIMED_OUT') {
             console.warn('Channel timed out');
@@ -69,7 +69,7 @@ class RealtimeSyncManager {
   }
 
   private handleDisconnect() {
-    this.isConnected = false;
+    this._connected = false;
     console.log('Real-time sync disconnected, attempting reconnect...');
     this.attemptReconnect();
   }
@@ -81,71 +81,46 @@ class RealtimeSyncManager {
       console.log(`Reconnecting in ${Math.round(delay)}ms... (attempt ${this.reconnectAttempts})`);
       setTimeout(() => this.initRealtimeChannel(), delay);
     } else {
-      console.warn('Max reconnection attempts reached, falling back to polling');
+      console.warn('Max reconnection attempts reached — polling only');
       this.setupPolling();
     }
   }
 
-  private setupFallbacks() {
-    // Fallback 1: Storage Events (for cross-tab communication on same device)
-    window.addEventListener('storage', (event) => {
-      if (!event.key) return;
-      const stateType = this.getStateTypeFromKey(event.key);
-      if (stateType && event.newValue) {
-        try {
-          const data = JSON.parse(event.newValue);
-          this.notifyListeners(stateType, data);
-        } catch (e) {
-          console.error('Failed to parse storage event:', e);
-        }
-      }
-    });
-
-    // Fallback 2: Polling API for last-resort updates
-    this.setupPolling();
-  }
-
   private setupPolling() {
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-    }
-    
-    // Poll every 3 seconds if real-time disconnected
+    if (this.pollingInterval) clearInterval(this.pollingInterval);
     this.pollingInterval = setInterval(() => {
-      if (!this.isConnected) {
-        this.fetchLatestState();
-      }
+      if (!this._connected) this.fetchLatestState();
     }, 3000);
   }
 
   private async fetchLatestState() {
     try {
       const response = await fetch('/api/config');
-      if (response.ok) {
-        const data = await response.json();
-        
-        // Update all state types
-        ['person', 'senders', 'theme', 'polaroids'].forEach((type) => {
-          if (data[type]) {
-            this.handleStateUpdate({
-              type: type as StateType,
-              data: data[type],
-              timestamp: Date.now(),
-              id: `poll-${Date.now()}-${type}`
-            });
-          }
-        });
+      if (!response.ok) {
+        console.warn(`fetchLatestState: returned ${response.status} — skipping`);
+        return;
       }
+      const data = await response.json();
+      (['person', 'senders', 'theme', 'polaroids'] as StateType[]).forEach((type) => {
+        if (data[type] !== undefined && data[type] !== null) {
+          this.handleStateUpdate({
+            type,
+            data: data[type],
+            timestamp: Date.now(),
+            id: `poll-${Date.now()}-${type}`,
+          });
+        }
+      });
     } catch (e) {
-      console.error('Failed to fetch latest state:', e);
+      console.warn('fetchLatestState failed (empty DB or network error):', e);
     }
   }
 
   private monitorConnection() {
-    // Monitor connection status periodically
-    setInterval(() => {
-      if (!this.isConnected && this.channel?.state === 'SUBSCRIBED') {
-        this.isConnected = true;
+    if (this.monitorInterval) clearInterval(this.monitorInterval);
+    this.monitorInterval = setInterval(() => {
+      if (!this._connected && this.channel?.state === 'SUBSCRIBED') {
+        this._connected = true;
         this.fetchLatestState();
       }
     }, 5000);
@@ -153,127 +128,97 @@ class RealtimeSyncManager {
 
   private getStateTypeFromKey(key: string): StateType | null {
     const mapping: { [key: string]: StateType } = {
-      'chaarYaarPerson': 'person',
-      'chaarYaarSenders': 'senders',
-      'chaarYaarTheme': 'theme',
-      'chaarYaarPolaroids': 'polaroids'
+      chaarYaarPerson: 'person',
+      chaarYaarSenders: 'senders',
+      chaarYaarTheme: 'theme',
+      chaarYaarPolaroids: 'polaroids',
     };
     return mapping[key] || null;
   }
 
   private getKeyFromStateType(type: StateType): string {
     const mapping: { [key in StateType]: string } = {
-      'person': 'chaarYaarPerson',
-      'senders': 'chaarYaarSenders',
-      'theme': 'chaarYaarTheme',
-      'polaroids': 'chaarYaarPolaroids'
+      person: 'chaarYaarPerson',
+      senders: 'chaarYaarSenders',
+      theme: 'chaarYaarTheme',
+      polaroids: 'chaarYaarPolaroids',
     };
     return mapping[type];
   }
 
   private handleStateUpdate(update: StateUpdate) {
-    // Prevent duplicate processing
-    if (this.processedUpdateIds.has(update.id)) {
-      return;
-    }
-
+    if (this.processedUpdateIds.has(update.id)) return;
     this.processedUpdateIds.add(update.id);
-
-    // Keep processed IDs from growing unbounded
     if (this.processedUpdateIds.size > this.maxProcessedIds) {
-      const idsArray = Array.from(this.processedUpdateIds);
-      this.processedUpdateIds = new Set(idsArray.slice(-this.maxProcessedIds));
+      const arr = Array.from(this.processedUpdateIds);
+      this.processedUpdateIds = new Set(arr.slice(-this.maxProcessedIds));
     }
-
-    // Save to localStorage
     const key = this.getKeyFromStateType(update.type);
     try {
       localStorage.setItem(key, JSON.stringify(update.data));
     } catch (e) {
       console.error('Failed to save to localStorage:', e);
     }
-
-    // Notify all listeners
     this.notifyListeners(update.type, update.data);
   }
 
   private notifyListeners(type: StateType, data: any) {
     const typeListeners = this.listeners.get(type);
     if (typeListeners) {
-      typeListeners.forEach(listener => {
-        try {
-          listener(data);
-        } catch (e) {
+      typeListeners.forEach((listener) => {
+        try { listener(data); } catch (e) {
           console.error('Error in state listener:', e);
         }
       });
     }
   }
 
-  /**
-   * Subscribe to state changes
-   */
   subscribe(type: StateType, listener: StateListener): () => void {
-    if (!this.listeners.has(type)) {
-      this.listeners.set(type, new Set());
-    }
+    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
     this.listeners.get(type)!.add(listener);
-
-    // Return unsubscribe function
-    return () => {
-      this.listeners.get(type)?.delete(listener);
-    };
+    return () => { this.listeners.get(type)?.delete(listener); };
   }
 
-  /**
-   * Broadcast state update to all connected clients via Supabase Realtime
-   */
   async broadcast(type: StateType, data: any): Promise<void> {
     const update: StateUpdate = {
       type,
       data,
       timestamp: Date.now(),
-      id: `${type}-${Date.now()}-${Math.random()}`
+      id: `${type}-${Date.now()}-${Math.random()}`,
     };
-
-    try {
-      // Broadcast via Supabase Realtime to all subscribers
-      if (this.channel) {
+    this.handleStateUpdate(update);
+    if (this.channel && this._connected) {
+      try {
         await this.channel.send({
           type: 'broadcast',
           event: 'state_update',
           payload: update,
         });
+      } catch (e) {
+        console.warn('Supabase broadcast failed (non-fatal):', e);
       }
-    } catch (e) {
-      console.error('Failed to broadcast via Supabase:', e);
     }
-
-    // Also handle locally
-    this.handleStateUpdate(update);
   }
 
-  /**
-   * Get current connection status
-   */
   isConnected(): boolean {
-    return this.isConnected && this.channel?.state === 'SUBSCRIBED';
+    try {
+      return this._connected && this.channel?.state === 'SUBSCRIBED';
+    } catch {
+      return false;
+    }
   }
 
-  /**
-   * Clean up resources
-   */
   destroy() {
     if (this.channel) {
-      this.channel.unsubscribe();
+      try { this.channel.unsubscribe(); } catch (_) {}
       this.channel = null;
     }
-    if (this.pollingInterval) {
-      clearInterval(this.pollingInterval);
-    }
+    if (this.pollingInterval) { clearInterval(this.pollingInterval); this.pollingInterval = null; }
+    if (this.monitorInterval) { clearInterval(this.monitorInterval); this.monitorInterval = null; }
+    this._connected = false;
+    this.reconnectAttempts = 0;
     this.listeners.clear();
   }
 }
 
-// Singleton instance
 export const realtimeSyncManager = new RealtimeSyncManager();
