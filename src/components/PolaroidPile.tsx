@@ -74,18 +74,24 @@ function PolaroidCard({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: -900, scale: 1.3, rotate: initialRotate }}
+      initial={{ opacity: 0, y: '-100vh', scale: 1.3, rotate: initialRotate }}
       animate={
         isInView
-          ? { opacity: opacityVal, y: yOffset, scale: scaleOffset, rotate: rotateOffset, x: 0, zIndex: zIndexVal }
-          : { opacity: 0, y: -900, scale: 1.3, rotate: initialRotate, x: 0, zIndex: zIndexVal }
+          ? { opacity: opacityVal, y: yOffset, scale: scaleOffset, rotate: rotateOffset, x: 0 }
+          : { opacity: 0, y: '-100vh', scale: 1.3, rotate: initialRotate, x: 0 }
       }
-      transition={{
-        duration: isSelected ? 0.4 : 1.1,
-        delay: (!hasEntered && isInView && !isSelected) ? 0.1 + visualIndex * 0.15 : 0,
-        type: 'spring', bounce: 0.4, restDelta: 0.001
-      }}
-      style={{ position: 'absolute', transformOrigin: 'bottom center' }}
+      transition={
+        isSelected
+          ? { type: 'spring', stiffness: 200, damping: 25 }
+          : {
+              type: 'spring',
+              stiffness: 50,
+              damping: 12,
+              delay: (!hasEntered && isInView) ? index * 0.2 : 0,
+              restDelta: 0.001,
+            }
+      }
+      style={{ position: 'absolute', transformOrigin: 'bottom center', zIndex: zIndexVal }}
       className="pointer-events-auto"
     >
       <motion.div
