@@ -15,6 +15,7 @@ export interface PolaroidImage {
   id: string;
   url: string;
   caption: string;
+  roastBack?: string;
 }
 
 export const defaultBirthdayPerson: BirthdayPerson = {
@@ -33,16 +34,19 @@ export const defaultPolaroids: PolaroidImage[] = [
   { 
     id: 'p1', 
     url: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&h=400&fit=crop',
-    caption: 'Birthday Fun'
+    caption: 'Birthday Fun',
+    roastBack: 'Yeh wala din yaad hai? Tu itna hasa tha ke paani aa gaya aankh mein 😂'
   },
   { 
     id: 'p2', 
     url: 'https://images.unsplash.com/photo-1527529482837-4698179dc6ce?w=400&h=400&fit=crop',
-    caption: 'Party Time'
+    caption: 'Party Time',
+    roastBack: 'Iss photo mein tu bilkul gadha lag raha hai, par pyaara gadha 🫏❤️'
   },
   { 
     id: 'p3', 
     url: 'https://images.unsplash.com/photo-1576607552471-f6cc9ef0d473?w=400&h=400&fit=crop',
-    caption: 'Happy Moments'
+    caption: 'Happy Moments',
+    roastBack: 'Yeh moment toh sach mein fire tha! Happy Birthday bhai 🔥'
   }
 ];
