@@ -30,10 +30,14 @@ function PolaroidCard({
   const visualIndex = stackLength - 1 - index;
   const [isFlipped, setIsFlipped] = useState(false);
 
-  // Stable random rotate so it doesn't re-randomise on every render
-  const initialRotate = useRef((Math.random() - 0.5) * 60).current;
+  // ── Stable random values (never re-randomise on re-render) ──────────────────
+  // Each card flies in from a DIFFERENT x position so you can actually see
+  // each one falling individually instead of all dropping on the same spot.
+  const startX     = useRef((Math.random() - 0.5) * 600).current;  // -300 to +300
+  const startRotate = useRef((Math.random() - 0.5) * 90).current;  // -45 to +45
+  const startY      = useRef(-900 - Math.random() * 200).current;   // staggered heights too
 
-  const yOffset    = isSelected ? 0 : visualIndex * 15;
+  const yOffset      = isSelected ? 0 : visualIndex * 15;
   const rotateOffset = isSelected ? 0 : (visualIndex % 2 === 0 ? -1 : 1) * visualIndex * 3;
   const scaleOffset  = isSelected ? 1.25 : Math.max(0.8, 1 - visualIndex * 0.05);
   const zIndexVal    = isSelected ? 100 : index;
@@ -56,14 +60,12 @@ function PolaroidCard({
     transition: { duration: 4 + Math.random() * 2, repeat: Infinity, repeatType: 'reverse' as const, ease: 'easeInOut' }
   } : {};
 
-  // When deselected, reset flip
   useEffect(() => {
     if (!isSelected) setIsFlipped(false);
   }, [isSelected]);
 
   const handleCardClick = () => {
     if (isSelected) {
-      // Already selected — toggle flip
       playPopSound(isFlipped ? 100 : 220);
       setIsFlipped(f => !f);
     } else if (isTop) {
@@ -72,22 +74,25 @@ function PolaroidCard({
     }
   };
 
+  // ── Drop-in: cards fly from spread-out positions and converge into the pile ─
+  const dropDelay = (!hasEntered && isInView) ? index * 0.28 : 0;
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: '-100vh', scale: 1.3, rotate: initialRotate }}
+      initial={{ opacity: 0, y: startY, x: startX, scale: 1.3, rotate: startRotate }}
       animate={
         isInView
-          ? { opacity: opacityVal, y: yOffset, scale: scaleOffset, rotate: rotateOffset, x: 0 }
-          : { opacity: 0, y: '-100vh', scale: 1.3, rotate: initialRotate, x: 0 }
+          ? { opacity: opacityVal, y: yOffset, x: 0, scale: scaleOffset, rotate: rotateOffset }
+          : { opacity: 0, y: startY, x: startX, scale: 1.3, rotate: startRotate }
       }
       transition={
         isSelected
-          ? { type: 'spring', stiffness: 200, damping: 25 }
+          ? { type: 'spring', stiffness: 220, damping: 26 }
           : {
               type: 'spring',
-              stiffness: 50,
-              damping: 12,
-              delay: (!hasEntered && isInView) ? index * 0.2 : 0,
+              stiffness: 48,
+              damping: 11,
+              delay: dropDelay,
               restDelta: 0.001,
             }
       }
@@ -111,15 +116,11 @@ function PolaroidCard({
         animate={driftAnimation}
         style={(!isTop && !isSelected) ? { scale: innerScale, y: innerY } : {}}
         className="bg-white p-2 pb-6 md:p-3 md:pb-8 shadow-xl rounded-sm border border-gray-200 w-48 h-56 md:w-64 md:h-72 flex flex-col items-center justify-between touch-none cursor-grab active:cursor-grabbing"
-        style2={{ perspective: '1000px' }}
       >
         {/* Flip container */}
         <div
           className="w-full h-full relative"
-          style={{
-            perspective: '800px',
-            transformStyle: 'preserve-3d',
-          }}
+          style={{ perspective: '800px', transformStyle: 'preserve-3d' }}
         >
           <motion.div
             animate={{ rotateY: isFlipped ? 180 : 0 }}
@@ -142,7 +143,6 @@ function PolaroidCard({
               <span className="font-sans text-gray-800 text-xs md:text-sm font-medium transform -rotate-1 truncate max-w-full pointer-events-none">
                 {image.caption}
               </span>
-              {/* Flip hint — only show when selected and has a roastBack */}
               {isSelected && image.roastBack && (
                 <motion.span
                   initial={{ opacity: 0, y: 4 }}
@@ -180,9 +180,9 @@ function PolaroidCard({
 
 export default function PolaroidPile({ images }: { images: PolaroidImage[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeId, setActiveId]   = useState<string | null>(null);
   const [hasEntered, setHasEntered] = useState(false);
-  const isInView = useInView(containerRef, { once: true, margin: '-5% 0px -5% 0px' });
+  const isInView    = useInView(containerRef, { once: true, margin: '-5% 0px -5% 0px' });
   const dragProgress = useMotionValue(0);
   const [stack, setStack] = useState<PolaroidImage[]>([]);
 
@@ -194,7 +194,8 @@ export default function PolaroidPile({ images }: { images: PolaroidImage[] }) {
 
   useEffect(() => {
     if (isInView && !hasEntered) {
-      setTimeout(() => setHasEntered(true), images.length * 150 + 800);
+      // Wait for all cards to finish landing before enabling drift + interactions
+      setTimeout(() => setHasEntered(true), images.length * 280 + 1200);
     }
   }, [isInView, hasEntered, images.length]);
 
@@ -223,18 +224,32 @@ export default function PolaroidPile({ images }: { images: PolaroidImage[] }) {
     }
   };
 
+  // Total landing time — scroll hint appears after last card lands
+  const lastCardDelay = (stack.length - 1) * 0.28;
+
   return (
-    <div ref={containerRef} className="w-full relative py-16 grid place-items-center min-h-[580px] overflow-hidden my-8 px-4">
-      <h3 className="absolute top-4 md:top-8 left-0 right-0 text-xl md:text-2xl font-bold text-white/50 z-0 text-center px-4 w-full">
-        Memories 📸<br/>
-        <span className="text-sm font-normal">(Swipe to shuffle • Tap to inspect • Tap again to flip!)</span>
-      </h3>
+    <div ref={containerRef} className="w-full relative py-16 grid place-items-center min-h-[620px] overflow-hidden my-8 px-4">
+
+      {/* Section heading */}
+      <motion.h3
+        initial={{ opacity: 0, y: -20 }}
+        animate={isInView ? { opacity: 1, y: 0 } : { opacity: 0, y: -20 }}
+        transition={{ duration: 0.6, ease: 'easeOut' }}
+        className="absolute top-4 md:top-8 left-0 right-0 text-xl md:text-2xl font-bold text-white/60 z-0 text-center px-4 w-full"
+      >
+        Memories 📸
+        <br />
+        <span className="text-sm font-normal text-white/35">
+          Swipe to shuffle&nbsp;•&nbsp;Tap to inspect&nbsp;•&nbsp;Tap again to flip!
+        </span>
+      </motion.h3>
 
       {activeId && (
         <div className="absolute inset-0 z-40 cursor-zoom-out" onClick={() => setActiveId(null)} />
       )}
 
-      <div className="relative grid place-items-center w-full max-w-[280px] sm:max-w-sm md:max-w-md h-[400px] mt-12 perspective-1000">
+      {/* Pile */}
+      <div className="relative grid place-items-center w-full max-w-[280px] sm:max-w-sm md:max-w-md h-[400px] mt-12">
         {stack.map((image, index) => (
           <PolaroidCard
             key={image.id}
@@ -251,6 +266,33 @@ export default function PolaroidPile({ images }: { images: PolaroidImage[] }) {
           />
         ))}
       </div>
+
+      {/* ── Scroll hint — appears after all cards have landed ─────────────────
+           Bouncing arrow + label so users know there's more content below.    */}
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={
+          isInView
+            ? { opacity: [0, 0.7, 0.7, 0], y: [6, 0, 0, 10] }
+            : { opacity: 0 }
+        }
+        transition={{
+          delay: lastCardDelay + 1.4,
+          duration: 2.2,
+          repeat: Infinity,
+          repeatDelay: 1.2,
+          ease: 'easeInOut',
+        }}
+        className="absolute bottom-3 left-0 right-0 flex flex-col items-center gap-1 pointer-events-none z-10"
+      >
+        <span className="text-white/40 text-[10px] tracking-[0.2em] uppercase font-medium">
+          scroll
+        </span>
+        {/* Simple SVG chevron — no extra import needed */}
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="text-white/30">
+          <path d="M5 8l5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </motion.div>
     </div>
   );
 }
