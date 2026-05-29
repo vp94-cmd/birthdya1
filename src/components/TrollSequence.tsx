@@ -382,7 +382,7 @@ export default function TrollSequence({ onComplete, onPlayAudio }: { onComplete:
         {phase === 'alerts' && (
           <motion.div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4 backdrop-blur-md">
              {/* Heavy Background visual glitch mapping to the Audio start */}
-             <div className="absolute inset-0 bg-[url('https://api.aistudio.google.com/resources/noise.png')] opacity-30 mix-blend-overlay" />
+             <div className="absolute inset-0 opacity-30 mix-blend-overlay" style={{backgroundImage:"url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")", backgroundSize:"150px 150px"}} />
              <motion.div 
                animate={{ 
                  x: [-10, 10, -5, 20, 0],
@@ -467,7 +467,7 @@ export default function TrollSequence({ onComplete, onPlayAudio }: { onComplete:
               transition={{ duration: 0.2, repeat: Infinity, repeatType: 'reverse' }}
               className="absolute inset-0 bg-cyan-600 mix-blend-screen"
             />
-            <div className="absolute inset-0 bg-[url('https://api.aistudio.google.com/resources/noise.png')] opacity-70 mix-blend-overlay" />
+            <div className="absolute inset-0 opacity-70 mix-blend-overlay" style={{backgroundImage:"url(\"data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")", backgroundSize:"150px 150px"}} />
           </motion.div>
         )}
       </AnimatePresence>

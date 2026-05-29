@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { QrCode, X, Sparkles, Share2 } from 'lucide-react';
+import { QrCode, X, Sparkles, Share2, AlertTriangle } from 'lucide-react';
 import { BirthdayPerson, Sender, PolaroidImage, defaultBirthdayPerson, defaultSenders, defaultPolaroids } from '../types';
 import TiltCard from './TiltCard';
 import ConfettiCanvas from './ConfettiCanvas';
@@ -74,7 +74,7 @@ export default function MainBirthdayScreen({ adminOpen, onPlayAudio }: { adminOp
   // Load initial config from API if available (for server-side deployment)
   useEffect(() => {
     fetch('/api/config')
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error('api_unavailable'); return r.json(); })
       .then(data => {
         if (data.person) {
           setPerson(data.person);

@@ -81,11 +81,15 @@ export default function AdminPanel({ isOpen, onClose }: { isOpen: boolean, onClo
       localStorage.setItem('chaarYaarPolaroids', JSON.stringify(polaroids));
 
       // 2. Persist to Netlify DB via API function (survives page refresh for all users)
-      await fetch('/api/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config),
-      });
+      // Wrapped in try/catch — endpoint is optional on static deployments (Supabase handles persistence)
+      try {
+        const res = await fetch('/api/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config),
+        });
+        if (!res.ok) console.debug('[AdminPanel] /api/config unavailable, using Supabase only.');
+      } catch (_) { /* static deployment — expected */ }
 
       // 3. Broadcast + DB save via globalStateManager (handles Supabase realtime + DB)
       await globalStateManager.saveConfig(config);
