@@ -30,6 +30,24 @@ const DEFAULT_SENDERS = [
   },
 ];
 
+const DEFAULT_POLAROIDS = [
+  {
+    id: "p1",
+    url: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=400&h=400&fit=crop",
+    caption: "Birthday Fun",
+  },
+  {
+    id: "p2",
+    url: "https://images.unsplash.com/photo-1527529482837-4698179dc6ce?w=400&h=400&fit=crop",
+    caption: "Party Time",
+  },
+  {
+    id: "p3",
+    url: "https://images.unsplash.com/photo-1576607552471-f6cc9ef0d473?w=400&h=400&fit=crop",
+    caption: "Happy Moments",
+  },
+];
+
 export default async (req: Request) => {
   const headers = {
     "Content-Type": "application/json",
@@ -48,6 +66,7 @@ export default async (req: Request) => {
           person: DEFAULT_PERSON,
           senders: DEFAULT_SENDERS,
           theme: "classic",
+          polaroids: DEFAULT_POLAROIDS,
         },
         { headers }
       );
@@ -58,6 +77,7 @@ export default async (req: Request) => {
         person: JSON.parse(row.person),
         senders: JSON.parse(row.senders),
         theme: row.theme,
+        polaroids: row.polaroids ? JSON.parse(row.polaroids) : DEFAULT_POLAROIDS,
       },
       { headers }
     );
@@ -67,6 +87,7 @@ export default async (req: Request) => {
     const body = await req.json();
     const personJson = JSON.stringify(body.person);
     const sendersJson = JSON.stringify(body.senders);
+    const polaroidsJson = JSON.stringify(body.polaroids || []);
     const theme = body.theme || "classic";
 
     const existing = await db.select().from(siteConfig).limit(1);
@@ -75,12 +96,13 @@ export default async (req: Request) => {
         person: personJson,
         senders: sendersJson,
         theme,
+        polaroids: polaroidsJson,
       });
     } else {
       const { eq } = await import("drizzle-orm");
       await db
         .update(siteConfig)
-        .set({ person: personJson, senders: sendersJson, theme, updatedAt: new Date() })
+        .set({ person: personJson, senders: sendersJson, theme, polaroids: polaroidsJson, updatedAt: new Date() })
         .where(eq(siteConfig.id, existing[0].id));
     }
 
