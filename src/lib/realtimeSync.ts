@@ -1,4 +1,4 @@
-import { supabase } from './supabaseClient';
+import { supabase } from '../supabaseClient';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
 type StateType = 'person' | 'senders' | 'theme' | 'polaroids';
@@ -10,6 +10,9 @@ interface StateUpdate {
   timestamp: number;
   id: string;
 }
+
+// The singleton row that holds all config in the DB
+const CONFIG_ROW_ID = 1;
 
 class RealtimeSyncManager {
   private channel: RealtimeChannel | null = null;
@@ -93,57 +96,97 @@ class RealtimeSyncManager {
     }, 3000);
   }
 
+  /**
+   * FIX #2: Reads from the Supabase `site_config` table (row id=1).
+   * The original code called fetch('/api/config') which doesn't exist on
+   * Netlify (static hosting), causing a silent 404 on every poll.
+   */
   private async fetchLatestState() {
+    if (!supabase) return;
     try {
-      const response = await fetch('/api/config');
-      if (!response.ok) {
-        console.warn(`fetchLatestState: returned ${response.status} — skipping`);
+      const { data, error } = await supabase
+        .from('site_config')
+        .select('person, senders, theme, polaroids')
+        .eq('id', CONFIG_ROW_ID)
+        .single();
+
+      if (error) {
+        // PGRST116 = "no rows found" — DB is empty, not a real error
+        if (error.code !== 'PGRST116') {
+          console.warn('fetchLatestState: Supabase query failed:', error.message);
+        }
         return;
       }
-      const data = await response.json();
+      if (!data) return;
+
       (['person', 'senders', 'theme', 'polaroids'] as StateType[]).forEach((type) => {
-        if (data[type] !== undefined && data[type] !== null) {
+        const raw = data[type as keyof typeof data];
+        if (raw === undefined || raw === null) return;
+        try {
+          // DB stores JSON as TEXT — parse it.
+          // If the column were jsonb it would already be an object; handle both.
+          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
           this.handleStateUpdate({
             type,
-            data: data[type],
+            data: parsed,
             timestamp: Date.now(),
-            id: `poll-${Date.now()}-${type}`,
+            id: `db-fetch-${Date.now()}-${type}`,
           });
+        } catch (e) {
+          console.warn(`fetchLatestState: could not parse "${type}":`, e);
         }
       });
     } catch (e) {
-      console.warn('fetchLatestState failed (empty DB or network error):', e);
+      console.warn('fetchLatestState: unexpected error:', e);
     }
+  }
+
+  /**
+   * FIX #3: Persist the full config object to the Supabase `site_config`
+   * table in a single atomic UPDATE.
+   *
+   * Previously there was NO database write anywhere — only localStorage +
+   * ephemeral Realtime broadcast — so data was lost on every page refresh.
+   *
+   * Called by globalStateManager.saveConfig() from AdminPanel's handleSave.
+   */
+  async saveToDatabase(config: {
+    person: any;
+    senders: any;
+    theme: string;
+    polaroids: any;
+  }): Promise<void> {
+    if (!supabase) {
+      console.warn('saveToDatabase: Supabase unavailable — DB write skipped.');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('site_config')
+      .update({
+        person:   JSON.stringify(config.person),
+        senders:  JSON.stringify(config.senders),
+        theme:    config.theme,
+        polaroids: JSON.stringify(config.polaroids),
+      })
+      .eq('id', CONFIG_ROW_ID);
+
+    if (error) {
+      console.error('saveToDatabase failed:', error.message);
+      throw new Error(`DB save failed: ${error.message}`);
+    }
+
+    console.log('✅ Config saved to Supabase database');
   }
 
   private monitorConnection() {
     if (this.monitorInterval) clearInterval(this.monitorInterval);
     this.monitorInterval = setInterval(() => {
-      if (!this._connected && this.channel?.state === 'SUBSCRIBED') {
-        this._connected = true;
+      // FIX #1 (partial): Only use this._connected — do NOT check channel.state here.
+      if (!this._connected && this.channel) {
         this.fetchLatestState();
       }
     }, 5000);
-  }
-
-  private getStateTypeFromKey(key: string): StateType | null {
-    const mapping: { [key: string]: StateType } = {
-      chaarYaarPerson: 'person',
-      chaarYaarSenders: 'senders',
-      chaarYaarTheme: 'theme',
-      chaarYaarPolaroids: 'polaroids',
-    };
-    return mapping[key] || null;
-  }
-
-  private getKeyFromStateType(type: StateType): string {
-    const mapping: { [key in StateType]: string } = {
-      person: 'chaarYaarPerson',
-      senders: 'chaarYaarSenders',
-      theme: 'chaarYaarTheme',
-      polaroids: 'chaarYaarPolaroids',
-    };
-    return mapping[type];
   }
 
   private handleStateUpdate(update: StateUpdate) {
@@ -173,6 +216,16 @@ class RealtimeSyncManager {
     }
   }
 
+  private getKeyFromStateType(type: StateType): string {
+    const mapping: { [key in StateType]: string } = {
+      person:   'chaarYaarPerson',
+      senders:  'chaarYaarSenders',
+      theme:    'chaarYaarTheme',
+      polaroids: 'chaarYaarPolaroids',
+    };
+    return mapping[type];
+  }
+
   subscribe(type: StateType, listener: StateListener): () => void {
     if (!this.listeners.has(type)) this.listeners.set(type, new Set());
     this.listeners.get(type)!.add(listener);
@@ -200,12 +253,18 @@ class RealtimeSyncManager {
     }
   }
 
+  /**
+   * FIX #1: Removed `&& this.channel?.state === 'SUBSCRIBED'`
+   *
+   * Root cause of "Offline Mode" always showing:
+   * `channel.state` is a Phoenix internal property with values like 'joined',
+   * 'joining', 'leaving', 'closed' — NOT the Supabase status string 'SUBSCRIBED'.
+   * The second condition was ALWAYS false, making isConnected() always return
+   * false even when fully connected. Fix: rely solely on this._connected, which
+   * is set correctly in the subscribe() callback above.
+   */
   isConnected(): boolean {
-    try {
-      return this._connected && this.channel?.state === 'SUBSCRIBED';
-    } catch {
-      return false;
-    }
+    return this._connected;
   }
 
   destroy() {

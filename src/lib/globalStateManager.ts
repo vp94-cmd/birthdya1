@@ -9,16 +9,11 @@ import { realtimeSyncManager } from './realtimeSync';
 type StateListener = (data: any) => void;
 type StateType = 'person' | 'senders' | 'theme' | 'polaroids';
 
-interface StateUpdate {
-  type: StateType;
-  data: any;
-  timestamp: number;
-}
-
 class GlobalStateManager {
   private listeners: Map<StateType, Set<StateListener>> = new Map();
-  private lastUpdate: Map<StateType, number> = new Map();
-  private updateDebounceTime = 100; // ms
+  private pendingUpdates: Map<StateType, any> = new Map();
+  private debounceTimers: Map<StateType, ReturnType<typeof setTimeout>> = new Map();
+  private updateDebounceTime = 100;
 
   constructor() {
     this.setupRealtimeSync();
@@ -26,48 +21,52 @@ class GlobalStateManager {
   }
 
   private setupRealtimeSync() {
-    // Subscribe to real-time updates from Supabase
     const types: StateType[] = ['person', 'senders', 'theme', 'polaroids'];
     types.forEach(type => {
-      realtimeSyncManager.subscribe(type, (data) => {
-        this.notifyListeners(type, data);
-      });
-    });
-  }
-
-  private setupStorageListener() {
-    // Listen for storage changes from other tabs (fallback)
-    window.addEventListener('storage', (event) => {
-      if (!event.key) return;
-      
-      const stateType = this.getStateTypeFromKey(event.key);
-      if (stateType && event.newValue) {
-        try {
-          const data = JSON.parse(event.newValue);
-          this.notifyListeners(stateType, data);
-        } catch (e) {
-          console.error('Failed to parse storage event data:', e);
-        }
+      try {
+        realtimeSyncManager.subscribe(type, (data) => {
+          this.notifyListeners(type, data);
+        });
+      } catch (e) {
+        console.error(`Failed to subscribe to realtimeSyncManager for "${type}":`, e);
       }
     });
   }
 
+  private setupStorageListener() {
+    try {
+      window.addEventListener('storage', (event) => {
+        if (!event.key) return;
+        const stateType = this.getStateTypeFromKey(event.key);
+        if (stateType && event.newValue) {
+          try {
+            this.notifyListeners(stateType, JSON.parse(event.newValue));
+          } catch (e) {
+            console.error('Failed to parse storage event data:', e);
+          }
+        }
+      });
+    } catch (e) {
+      console.error('Failed to set up storage listener:', e);
+    }
+  }
+
   private getStateTypeFromKey(key: string): StateType | null {
     const mapping: { [key: string]: StateType } = {
-      'chaarYaarPerson': 'person',
-      'chaarYaarSenders': 'senders',
-      'chaarYaarTheme': 'theme',
-      'chaarYaarPolaroids': 'polaroids'
+      'chaarYaarPerson':   'person',
+      'chaarYaarSenders':  'senders',
+      'chaarYaarTheme':    'theme',
+      'chaarYaarPolaroids': 'polaroids',
     };
     return mapping[key] || null;
   }
 
   private getKeyFromStateType(type: StateType): string {
     const mapping: { [key in StateType]: string } = {
-      'person': 'chaarYaarPerson',
-      'senders': 'chaarYaarSenders',
-      'theme': 'chaarYaarTheme',
-      'polaroids': 'chaarYaarPolaroids'
+      'person':   'chaarYaarPerson',
+      'senders':  'chaarYaarSenders',
+      'theme':    'chaarYaarTheme',
+      'polaroids': 'chaarYaarPolaroids',
     };
     return mapping[type];
   }
@@ -76,108 +75,128 @@ class GlobalStateManager {
     const typeListeners = this.listeners.get(type);
     if (typeListeners) {
       typeListeners.forEach(listener => {
-        try {
-          listener(data);
-        } catch (e) {
+        try { listener(data); } catch (e) {
           console.error('Error in state listener:', e);
         }
       });
     }
   }
 
-  /**
-   * Subscribe to state changes for a specific type
-   * Returns unsubscribe function for cleanup
-   */
-  subscribe(type: StateType, listener: StateListener): () => void {
-    if (!this.listeners.has(type)) {
-      this.listeners.set(type, new Set());
-    }
-    this.listeners.get(type)!.add(listener);
-
-    // Return unsubscribe function
-    return () => {
-      this.listeners.get(type)?.delete(listener);
-    };
-  }
-
-  /**
-   * Broadcast a state update to all clients globally via Supabase Realtime
-   * Called by Admin Panel when changes are saved
-   */
-  async broadcast(type: StateType, data: any): Promise<void> {
-    const now = Date.now();
-    const lastUpdateTime = this.lastUpdate.get(type) || 0;
-
-    // Debounce rapid updates
-    if (now - lastUpdateTime < this.updateDebounceTime) {
-      return Promise.resolve();
-    }
-
-    this.lastUpdate.set(type, now);
-
-    // Save to localStorage first
+  private async _doBroadcast(type: StateType, data: any): Promise<void> {
     const key = this.getKeyFromStateType(type);
     try {
       localStorage.setItem(key, JSON.stringify(data));
     } catch (e) {
       console.error('Failed to save to localStorage:', e);
     }
-
-    // Broadcast via Supabase Realtime to all connected clients
     try {
       await realtimeSyncManager.broadcast(type, data);
     } catch (e) {
-      console.error('Failed to broadcast state update:', e);
-      throw e;
+      console.warn(`Unexpected broadcast error for "${type}", notifying locally:`, e);
+      this.notifyListeners(type, data);
+    }
+  }
+
+  subscribe(type: StateType, listener: StateListener): () => void {
+    if (!this.listeners.has(type)) this.listeners.set(type, new Set());
+    this.listeners.get(type)!.add(listener);
+
+    const key = this.getKeyFromStateType(type);
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored) listener(JSON.parse(stored));
+    } catch (e) {
+      console.error('Failed to hydrate subscriber:', e);
     }
 
-    // Also notify local listeners immediately
-    this.notifyListeners(type, data);
+    return () => { this.listeners.get(type)?.delete(listener); };
+  }
+
+  async broadcast(type: StateType, data: any): Promise<void> {
+    this.pendingUpdates.set(type, data);
+    const existing = this.debounceTimers.get(type);
+    if (existing) clearTimeout(existing);
+    this.debounceTimers.set(type, setTimeout(async () => {
+      const latestData = this.pendingUpdates.get(type);
+      this.pendingUpdates.delete(type);
+      this.debounceTimers.delete(type);
+      await this._doBroadcast(type, latestData!);
+    }, this.updateDebounceTime));
   }
 
   /**
-   * Broadcast all current state to other clients
+   * FIX #3: New method — saves all config to Supabase DB in one atomic call,
+   * then broadcasts to all connected clients via Realtime.
+   *
+   * AdminPanel's handleSave should call this instead of 4 separate broadcast()
+   * calls, so data actually persists across page refreshes.
+   *
+   * The old broadcast()-only approach only wrote to localStorage (single browser)
+   * and sent an ephemeral Realtime message — nothing was ever written to the DB.
    */
+  async saveConfig(config: {
+    person: any;
+    senders: any;
+    theme: string;
+    polaroids: any;
+  }): Promise<void> {
+    // 1. Save to localStorage immediately (instant local update)
+    localStorage.setItem('chaarYaarPerson',   JSON.stringify(config.person));
+    localStorage.setItem('chaarYaarSenders',  JSON.stringify(config.senders));
+    localStorage.setItem('chaarYaarTheme',    config.theme);
+    localStorage.setItem('chaarYaarPolaroids', JSON.stringify(config.polaroids));
+
+    // 2. Persist to Supabase DB (survives refresh, visible to all users)
+    await realtimeSyncManager.saveToDatabase(config);
+
+    // 3. Broadcast live update to all connected browser tabs/clients
+    await Promise.all([
+      realtimeSyncManager.broadcast('person',   config.person),
+      realtimeSyncManager.broadcast('senders',  config.senders),
+      realtimeSyncManager.broadcast('theme',    config.theme),
+      realtimeSyncManager.broadcast('polaroids', config.polaroids),
+    ]);
+
+    // 4. Notify local listeners directly (same tab, no round-trip needed)
+    this.notifyListeners('person',   config.person);
+    this.notifyListeners('senders',  config.senders);
+    this.notifyListeners('theme',    config.theme);
+    this.notifyListeners('polaroids', config.polaroids);
+  }
+
   async broadcastAll(): Promise<void> {
     const types: StateType[] = ['person', 'senders', 'theme', 'polaroids'];
-    
-    try {
-      await Promise.all(
-        types.map(type => {
-          const key = this.getKeyFromStateType(type);
-          const data = localStorage.getItem(key);
-          if (data) {
-            try {
-              return this.broadcast(type, JSON.parse(data));
-            } catch (e) {
-              console.error(`Failed to broadcast ${type}:`, e);
-              return Promise.resolve();
-            }
-          }
+    await Promise.all(
+      types.map(type => {
+        const key = this.getKeyFromStateType(type);
+        const raw = localStorage.getItem(key);
+        if (!raw) return Promise.resolve();
+        try {
+          return this.broadcast(type, JSON.parse(raw));
+        } catch (e) {
+          console.error(`broadcastAll: failed for "${type}":`, e);
           return Promise.resolve();
-        })
-      );
+        }
+      })
+    );
+  }
+
+  isRealtimeConnected(): boolean {
+    try {
+      return realtimeSyncManager.isConnected();
     } catch (e) {
-      console.error('Failed to broadcast all state:', e);
+      console.warn('isRealtimeConnected check failed:', e);
+      return false;
     }
   }
 
-  /**
-   * Get connection status - checks if Supabase Realtime is connected
-   */
-  isRealtimeConnected(): boolean {
-    return realtimeSyncManager.isConnected();
-  }
-
-  /**
-   * Clean up resources on app destroy
-   */
   destroy() {
+    this.debounceTimers.forEach(t => clearTimeout(t));
+    this.debounceTimers.clear();
+    this.pendingUpdates.clear();
     this.listeners.clear();
-    realtimeSyncManager.destroy();
+    try { realtimeSyncManager.destroy(); } catch (_) { /* ignore */ }
   }
 }
 
-// Singleton instance - exported for use throughout the app
 export const globalStateManager = new GlobalStateManager();
