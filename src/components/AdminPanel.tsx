@@ -420,6 +420,16 @@ export default function AdminPanel({ isOpen, onClose }: { isOpen: boolean, onClo
                               className="w-full bg-slate-950 border border-slate-700/80 rounded-md px-3 py-2 text-white text-xs focus:outline-none focus:border-indigo-500 transition-colors"
                             />
                           </div>
+                          <div className="space-y-2">
+                            <label className="text-xs text-slate-500">💬 Back Side Roast (flip pe dikhega)</label>
+                            <textarea
+                              value={polaroid.roastBack || ''}
+                              onChange={(e) => updatePolaroid(polaroid.id, 'roastBack', e.target.value)}
+                              placeholder="Yeh photo mein tu bilkul..."
+                              rows={2}
+                              className="w-full bg-slate-950 border border-slate-700/80 rounded-md px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-500 transition-colors leading-relaxed"
+                            />
+                          </div>
                         </div>
                       ))}
                       {polaroids.length === 0 && (

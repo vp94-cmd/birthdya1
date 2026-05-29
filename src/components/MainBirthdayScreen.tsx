@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { QrCode, X, Sparkles, Volume2, VolumeX, AlertTriangle, Terminal as TerminalIcon } from 'lucide-react';
+import { QrCode, X, Sparkles, Share2 } from 'lucide-react';
 import { BirthdayPerson, Sender, PolaroidImage, defaultBirthdayPerson, defaultSenders, defaultPolaroids } from '../types';
 import TiltCard from './TiltCard';
 import ConfettiCanvas from './ConfettiCanvas';
@@ -26,6 +26,44 @@ export default function MainBirthdayScreen({ adminOpen, onPlayAudio }: { adminOp
   });
   
   const [qrOpen, setQrOpen] = useState(false);
+
+  // Age Counter
+  const [ageDisplay, setAgeDisplay] = useState({ years: 0, days: 0, hours: 0, minutes: 0, seconds: 0 });
+
+  useEffect(() => {
+    const calcAge = () => {
+      try {
+        const cleaned = person.birthDate.replace(/(\d+)(st|nd|rd|th)/, "$1");
+        const now = new Date();
+        let birth = new Date(cleaned + " " + now.getFullYear());
+        if (isNaN(birth.getTime())) return;
+        if (birth > now) birth.setFullYear(now.getFullYear() - 1);
+        const diff = now.getTime() - birth.getTime();
+        const years   = Math.floor(diff / (365.25 * 24 * 3600 * 1000));
+        const days    = Math.floor((diff % (365.25 * 24 * 3600 * 1000)) / (24 * 3600 * 1000));
+        const hours   = Math.floor((diff % (24 * 3600 * 1000)) / (3600 * 1000));
+        const minutes = Math.floor((diff % (3600 * 1000)) / (60 * 1000));
+        const seconds = Math.floor((diff % (60 * 1000)) / 1000);
+        setAgeDisplay({ years, days, hours, minutes, seconds });
+      } catch (_) {}
+    };
+    calcAge();
+    const t = setInterval(calcAge, 1000);
+    return () => clearInterval(t);
+  }, [person.birthDate]);
+
+  // Share handler
+  const handleShare = () => {
+    const text = "Happy Birthday " + person.name + "! 🎉 Aao isko wish karo 👇";
+    const url  = window.location.href;
+    if (navigator.share) {
+      navigator.share({ title: "Happy Birthday " + person.name + "!", text, url }).catch(() => {});
+    } else {
+      window.open("https://wa.me/?text=" + encodeURIComponent(text + "
+" + url), "_blank");
+    }
+  };
+
   const [revealState, setRevealState] = useState<'waiting' | 'glitching' | 'revealed'>(() => {
     const time = globalAudio.currentTime;
     if (time >= 30.0 || globalAudio.paused) return 'revealed';
@@ -311,18 +349,57 @@ export default function MainBirthdayScreen({ adminOpen, onPlayAudio }: { adminOp
           {/* Polaroid Pile Section */}
           <PolaroidPile images={polaroids} />
 
-          <motion.div 
+          {/* Age Counter */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 2.0, duration: 0.8 }}
+            className="w-full mt-8 mb-4"
+          >
+            <div className="glass-panel neon-border rounded-2xl p-6 text-center">
+              <p className="text-xs font-mono uppercase tracking-widest text-cyan-400/70 mb-3">
+                ⏱ {person.name} is officially...
+              </p>
+              <div className="flex justify-center gap-3 md:gap-6 flex-wrap">
+                {[
+                  { val: ageDisplay.years,   label: "Saal" },
+                  { val: ageDisplay.days,    label: "Din" },
+                  { val: ageDisplay.hours,   label: "Ghante" },
+                  { val: ageDisplay.minutes, label: "Minute" },
+                  { val: ageDisplay.seconds, label: "Second" },
+                ].map(({ val, label }) => (
+                  <div key={label} className="flex flex-col items-center">
+                    <span className="text-2xl md:text-4xl font-extrabold text-white tabular-nums drop-shadow-[0_0_12px_rgba(6,182,212,0.6)]">
+                      {String(val).padStart(2, "0")}
+                    </span>
+                    <span className="text-[10px] md:text-xs text-cyan-300/60 font-mono uppercase tracking-wider mt-1">{label}</span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 mt-3 font-mono">...ka ho gaya! Aur ek second bhi waste kar diya 😂</p>
+            </div>
+          </motion.div>
+
+          {/* Buttons Row — QR + Share */}
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 2.5, duration: 1 }}
-            className="mt-16 flex items-center justify-center w-full"
+            className="mt-8 flex items-center justify-center gap-4 w-full flex-wrap"
           >
-            <button 
+            <button
               onClick={() => setQrOpen(true)}
               className="group flex items-center gap-3 px-8 py-4 glass-panel hover:bg-white/10 rounded-full text-white transition-all shadow-[0_0_20px_rgba(6,182,212,0.2)] hover:shadow-[0_0_30px_rgba(6,182,212,0.4)]"
             >
               <QrCode className="w-5 h-5 text-cyan-400 group-hover:text-fuchsia-400 transition-colors" />
-              <span className="tracking-wide text-sm font-bold uppercase">Generate Prank Code</span>
+              <span className="tracking-wide text-sm font-bold uppercase">Prank Code</span>
+            </button>
+            <button
+              onClick={handleShare}
+              className="group flex items-center gap-3 px-8 py-4 glass-panel hover:bg-white/10 rounded-full text-white transition-all shadow-[0_0_20px_rgba(192,38,211,0.2)] hover:shadow-[0_0_30px_rgba(192,38,211,0.4)]"
+            >
+              <Share2 className="w-5 h-5 text-fuchsia-400 group-hover:text-cyan-400 transition-colors" />
+              <span className="tracking-wide text-sm font-bold uppercase">Dosto Ko Bhejo</span>
             </button>
           </motion.div>
         </div>
