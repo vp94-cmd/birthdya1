@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import TrollSequence from './components/TrollSequence';
 import MainBirthdayScreen from './components/MainBirthdayScreen';
 import AdminPanel from './components/AdminPanel';
@@ -63,13 +63,17 @@ export default function App() {
   const [adminOpen, setAdminOpen] = useState(() => isAdminRoute());
   const [adminTaps, setAdminTaps] = useState(0);
 
+  const audioHasPlayed = useRef(false);
+
   const playAudio = useCallback((forceRestart = false, timestamp = 0) => {
+    if (audioHasPlayed.current) return;
     if (forceRestart) {
       globalAudio.currentTime = timestamp;
     }
     if (globalAudio.paused) {
       globalAudio.volume = 1.0;
       globalAudio.play().catch(e => console.log('[App] Audio play error:', e));
+      audioHasPlayed.current = true;
     } else if (forceRestart) {
       globalAudio.currentTime = timestamp;
     }
