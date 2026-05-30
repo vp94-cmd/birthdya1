@@ -264,8 +264,9 @@ export default function AdminPanel({ isOpen, onClose }: { isOpen: boolean, onClo
                         <option value="retro">Theme: Retro Green</option>
                       </select>
                       <button 
-                        onClick={() => {
-                          localStorage.removeItem('chaarYaarSequenceDone');
+                        onClick={async () => {
+                          await globalStateManager.resetIntro();
+                          // Reload admin's own page so they also see the intro
                           window.location.reload();
                         }}
                         className="text-sm font-bold text-amber-400 hover:text-amber-300 flex items-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 px-4 py-2 rounded-lg transition-colors border border-amber-500/20"
