@@ -1,4 +1,4 @@
-import { supabase } from '../supabaseClient';
+import { supabase } from './supabaseClient';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
 type StateType = 'person' | 'senders' | 'theme' | 'polaroids';
@@ -57,7 +57,7 @@ class RealtimeSyncManager {
         })
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
-            console.log('✅ Supabase Real-time connected');
+            // connected
             this.reconnectAttempts = 0;
             this._connected = true;
             this.fetchLatestState();
@@ -77,7 +77,7 @@ class RealtimeSyncManager {
 
   private handleDisconnect() {
     this._connected = false;
-    console.log('Real-time sync disconnected, attempting reconnect...');
+    
     this.attemptReconnect();
   }
 
@@ -85,7 +85,7 @@ class RealtimeSyncManager {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
       const delay = this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1);
-      console.log(`Reconnecting in ${Math.round(delay)}ms... (attempt ${this.reconnectAttempts})`);
+      
       setTimeout(() => this.initRealtimeChannel(), delay);
     } else {
       console.warn('Max reconnection attempts reached — polling only');
@@ -188,7 +188,7 @@ class RealtimeSyncManager {
       throw new Error(`DB save failed: ${error.message}`);
     }
 
-    console.log('✅ Config saved to Supabase database');
+    
   }
 
   private monitorConnection() {
@@ -293,7 +293,7 @@ class RealtimeSyncManager {
           event: 'reset_intro',
           payload: { timestamp: Date.now() },
         });
-        console.log('✅ Reset intro broadcast sent to all clients');
+        
       } catch (e) {
         console.warn('broadcastResetIntro failed (non-fatal):', e);
       }
