@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import TrollSequence from './components/TrollSequence';
 import MainBirthdayScreen from './components/MainBirthdayScreen';
 import AdminPanel from './components/AdminPanel';
+import { globalStateManager } from './lib/globalStateManager';
 
 // ── Crash-safe audio initialisation ──────────────────────────────────────────
 let _audio: HTMLAudioElement;
@@ -125,11 +126,19 @@ export default function App() {
     window.addEventListener('storage', handleStorage);
     window.addEventListener('themeUpdated', handleStorage);
 
+    // Listen for admin's "Reset Intro" broadcast — clears flag + resets view
+    // for ALL users who are currently on the page, not just the admin's tab.
+    const unsubResetIntro = globalStateManager.subscribeResetIntro(() => {
+      try { localStorage.removeItem('chaarYaarSequenceDone'); } catch (e) {}
+      setShowMain(false);
+    });
+
     return () => {
       window.removeEventListener('popstate', checkAdminRoute);
       window.removeEventListener('hashchange', checkAdminRoute);
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('themeUpdated', handleStorage);
+      unsubResetIntro();
     };
   }, []);
 
