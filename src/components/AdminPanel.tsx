@@ -106,7 +106,7 @@ export default function AdminPanel({ isOpen, onClose }: { isOpen: boolean, onClo
         onClose();
       }, 1500);
     } catch (err) {
-      console.error('Save failed:', err);
+      // save failed - UI error state already set
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 2000);
     }
