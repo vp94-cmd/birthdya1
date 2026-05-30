@@ -6,6 +6,7 @@ import TiltCard from './TiltCard';
 import ConfettiCanvas from './ConfettiCanvas';
 import MouseTrail from './MouseTrail';
 import PolaroidPile from './PolaroidPile';
+import ChaarYaarCourt from './ChaarYaarCourt';
 import { globalStateManager } from '../lib/globalStateManager';
 import { globalAudio } from '../App';
 
@@ -378,6 +379,9 @@ export default function MainBirthdayScreen({ adminOpen, onPlayAudio }: { adminOp
               <p className="text-xs text-slate-500 mt-3 font-mono">...ka ho gaya! Aur ek second bhi waste kar diya 😂</p>
             </div>
           </motion.div>
+
+          {/* Chaar Yaar Adalat */}
+          <ChaarYaarCourt birthdayName={person.name} />
 
           {/* Buttons Row — QR + Share */}
           <motion.div
