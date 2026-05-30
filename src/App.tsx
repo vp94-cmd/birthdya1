@@ -42,7 +42,6 @@ function isAdminRoute(): boolean {
     const hash = window.location.hash;
     const isAdminPath = pathname === '/admin' || pathname.endsWith('/admin');
     const isAdminHash = hash === '#admin';
-    console.log('[App] Route check:', { pathname, hash, isAdminPath, isAdminHash });
     return isAdminPath || isAdminHash;
   } catch (e) {
     console.error('[App] isAdminRoute error:', e);
@@ -73,7 +72,7 @@ export default function App() {
     }
     if (globalAudio.paused) {
       globalAudio.volume = 1.0;
-      globalAudio.play().catch(e => console.log('[App] Audio play error:', e));
+      globalAudio.play().catch(() => {});
       audioHasPlayed.current = true;
     } else if (forceRestart) {
       globalAudio.currentTime = timestamp;
@@ -84,7 +83,6 @@ export default function App() {
     const checkAdminRoute = () => {
       try {
         if (isAdminRoute()) {
-          console.log('[App] Admin route detected, opening admin panel');
           setShowMain(true);
           setAdminOpen(true);
         } else {
@@ -146,7 +144,6 @@ export default function App() {
     const newTaps = adminTaps + 1;
     setAdminTaps(newTaps);
     if (newTaps >= 5) {
-      console.log('[App] Admin panel unlocked via tap sequence');
       setAdminOpen(true);
       setAdminTaps(0);
     }
