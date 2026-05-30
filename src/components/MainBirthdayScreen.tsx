@@ -100,7 +100,6 @@ export default function MainBirthdayScreen({ adminOpen, onPlayAudio }: { adminOp
       })
       .catch(() => {
         // API not available - that's fine, we'll use localStorage defaults
-        console.debug('API config endpoint not available (expected for static deployments)');
       });
   }, []);
 
