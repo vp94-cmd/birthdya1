@@ -181,6 +181,32 @@ class GlobalStateManager {
     );
   }
 
+
+  /**
+   * Resets the intro sequence for ALL connected clients.
+   * Admin calls this — it clears their own localStorage flag AND broadcasts
+   * a reset_intro event so every other browser also clears their flag.
+   */
+  async resetIntro(): Promise<void> {
+    // Clear locally first (admin's own browser)
+    try {
+      localStorage.removeItem('chaarYaarSequenceDone');
+    } catch (e) {
+      console.warn('resetIntro: could not clear localStorage:', e);
+    }
+    // Broadcast to all other connected clients
+    await realtimeSyncManager.broadcastResetIntro();
+  }
+
+  /**
+   * Subscribe to reset_intro commands from admin.
+   * Used by App.tsx to listen for global intro resets.
+   * Returns unsubscribe function.
+   */
+  subscribeResetIntro(callback: () => void): () => void {
+    return realtimeSyncManager.subscribeResetIntro(callback);
+  }
+
   isRealtimeConnected(): boolean {
     try {
       return realtimeSyncManager.isConnected();

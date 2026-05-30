@@ -25,6 +25,7 @@ class RealtimeSyncManager {
   private _connected = false;
   private pollingInterval: ReturnType<typeof setInterval> | null = null;
   private monitorInterval: ReturnType<typeof setInterval> | null = null;
+  private resetIntroListeners: Set<() => void> = new Set();
 
   constructor() {
     if (!supabase) {
@@ -50,6 +51,9 @@ class RealtimeSyncManager {
       this.channel
         .on('broadcast', { event: 'state_update' }, (payload) => {
           this.handleStateUpdate(payload.payload as StateUpdate);
+        })
+        .on('broadcast', { event: 'reset_intro' }, () => {
+          this.notifyResetIntroListeners();
         })
         .subscribe((status) => {
           if (status === 'SUBSCRIBED') {
@@ -261,6 +265,43 @@ class RealtimeSyncManager {
     }
   }
 
+
+  /**
+   * Subscribe to reset_intro commands from admin.
+   * Called by App.tsx so all clients react when admin clicks Reset Intro.
+   */
+  subscribeResetIntro(callback: () => void): () => void {
+    this.resetIntroListeners.add(callback);
+    return () => { this.resetIntroListeners.delete(callback); };
+  }
+
+  private notifyResetIntroListeners() {
+    this.resetIntroListeners.forEach(cb => {
+      try { cb(); } catch (e) { console.error('Error in resetIntro listener:', e); }
+    });
+  }
+
+  /**
+   * Broadcast reset_intro command to all connected clients.
+   * Called by admin when they click "Reset Intro".
+   */
+  async broadcastResetIntro(): Promise<void> {
+    if (this.channel && this._connected) {
+      try {
+        await this.channel.send({
+          type: 'broadcast',
+          event: 'reset_intro',
+          payload: { timestamp: Date.now() },
+        });
+        console.log('✅ Reset intro broadcast sent to all clients');
+      } catch (e) {
+        console.warn('broadcastResetIntro failed (non-fatal):', e);
+      }
+    } else {
+      console.warn('broadcastResetIntro: not connected, only local reset applied');
+    }
+  }
+
   /**
    * FIX #1: Removed `&& this.channel?.state === 'SUBSCRIBED'`
    *
@@ -285,6 +326,7 @@ class RealtimeSyncManager {
     this._connected = false;
     this.reconnectAttempts = 0;
     this.listeners.clear();
+    this.resetIntroListeners.clear();
   }
 }
 
