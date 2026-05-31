@@ -18,7 +18,7 @@ export default function HomePage() {
     }
     if (globalAudio.paused) {
       globalAudio.volume = 1.0;
-      globalAudio.play().catch(e => console.log('[HomePage] Audio play error:', e));
+      globalAudio.play().catch(() => {});
     } else if (forceRestart) {
       globalAudio.currentTime = timestamp;
     }
