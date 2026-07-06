@@ -26,6 +26,7 @@ class RealtimeSyncManager {
   private pollingInterval: ReturnType<typeof setInterval> | null = null;
   private monitorInterval: ReturnType<typeof setInterval> | null = null;
   private resetIntroListeners: Set<() => void> = new Set();
+  private connectionListeners: Set<(connected: boolean) => void> = new Set();
 
   constructor() {
     if (!supabase) {
@@ -60,6 +61,7 @@ class RealtimeSyncManager {
             // connected
             this.reconnectAttempts = 0;
             this._connected = true;
+            this.notifyConnectionListeners(true);
             this.fetchLatestState();
           } else if (status === 'CHANNEL_ERROR') {
             console.error('Channel error');
@@ -312,6 +314,17 @@ class RealtimeSyncManager {
    * false even when fully connected. Fix: rely solely on this._connected, which
    * is set correctly in the subscribe() callback above.
    */
+  onConnectionChange(cb: (connected: boolean) => void): () => void {
+    this.connectionListeners.add(cb);
+    // immediately emit current state
+    cb(this._connected);
+    return () => this.connectionListeners.delete(cb);
+  }
+
+  private notifyConnectionListeners(connected: boolean) {
+    this.connectionListeners.forEach(cb => { try { cb(connected); } catch (_) {} });
+  }
+
   isConnected(): boolean {
     return this._connected;
   }

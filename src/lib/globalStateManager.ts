@@ -207,6 +207,10 @@ class GlobalStateManager {
     return realtimeSyncManager.subscribeResetIntro(callback);
   }
 
+  onConnectionChange(cb: (connected: boolean) => void): () => void {
+    return realtimeSyncManager.onConnectionChange(cb);
+  }
+
   isRealtimeConnected(): boolean {
     try {
       return realtimeSyncManager.isConnected();
