@@ -41,13 +41,10 @@ export default function AdminPanel({ isOpen, onClose }: { isOpen: boolean, onClo
 
   // Monitor real-time connection status
   useEffect(() => {
-    const checkConnection = () => {
-      setIsConnected(globalStateManager.isRealtimeConnected());
-    };
-    
-    checkConnection();
-    const interval = setInterval(checkConnection, 1000);
-    return () => clearInterval(interval);
+    const unsub = globalStateManager.onConnectionChange((connected) => {
+      setIsConnected(connected);
+    });
+    return unsub;
   }, []);
 
   const handleLogin = (e: React.FormEvent) => {
