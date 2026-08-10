@@ -128,6 +128,14 @@ export default function App() {
     // for ALL users who are currently on the page, not just the admin's tab.
     const unsubResetIntro = globalStateManager.subscribeResetIntro(() => {
       try { localStorage.removeItem('chaarYaarSequenceDone'); } catch (e) {}
+      // Allow the troll audio to play again on the next intro run —
+      // otherwise audioHasPlayed stays "true" forever after the first play
+      // and playAudio() silently no-ops on every future reset.
+      audioHasPlayed.current = false;
+      try {
+        globalAudio.pause();
+        globalAudio.currentTime = 0;
+      } catch (e) { /* ignore */ }
       setShowMain(false);
     });
 
