@@ -50,3 +50,31 @@ export const defaultPolaroids: PolaroidImage[] = [
     roastBack: 'Yeh moment toh sach mein fire tha! Happy Birthday bhai 🔥'
   }
 ];
+
+export interface Charge {
+  id: string;
+  year: string;
+  crime: string;
+  evidence: string;
+  severity: 'Minor' | 'Serious' | 'Heinous';
+}
+
+export interface CourtMember {
+  role: 'Judge' | 'Sarkari Vakeel' | 'Bachav Vakeel' | 'Gawah';
+  name: string;
+  verdict: string;
+}
+
+export const defaultCharges: Charge[] = [
+  { id: 'c1', year: '2022', crime: 'Pizza khake bill se bhaag gaya', evidence: 'Teeno gawahon ne dekha, CCTV footage bhi hai', severity: 'Heinous' },
+  { id: 'c2', year: '2021', crime: 'Group project mein "10 minute mein aata hoon" bolke 3 ghante baad aaya', evidence: 'WhatsApp read receipts pe blue tick the', severity: 'Serious' },
+  { id: 'c3', year: '2023', crime: 'Doston ki photo Instagram pe bina permission ke post kar diya', evidence: 'Screenshot saved hai aaj bhi', severity: 'Minor' },
+  { id: 'c4', year: '2020', crime: 'Cinema mein popcorn khatam hone ke baad dosto ka khata raha', evidence: '3 gawah aur ek khali tub', severity: 'Heinous' },
+];
+
+export const defaultCourtMembers: CourtMember[] = [
+  { role: 'Judge',          name: 'Hon. Justice Bade Bhai', verdict: 'Dost rehne ki saza — life imprisonment! 😂' },
+  { role: 'Sarkari Vakeel', name: 'Adv. Ashish',            verdict: 'Mulzim clearly guilty hai, milord!' },
+  { role: 'Bachav Vakeel',  name: 'Adv. Rohit',             verdict: 'Mera client bewakoof hai, par dil ka achha hai.' },
+  { role: 'Gawah',          name: 'Aditya',                 verdict: 'Maine apni aankho se dekha tha, milord. 100%.' },
+];
