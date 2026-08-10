@@ -7,7 +7,7 @@
 import { realtimeSyncManager } from './realtimeSync';
 
 type StateListener = (data: any) => void;
-type StateType = 'person' | 'senders' | 'theme' | 'polaroids';
+type StateType = 'person' | 'senders' | 'theme' | 'polaroids' | 'court';
 
 class GlobalStateManager {
   private listeners: Map<StateType, Set<StateListener>> = new Map();
@@ -21,7 +21,7 @@ class GlobalStateManager {
   }
 
   private setupRealtimeSync() {
-    const types: StateType[] = ['person', 'senders', 'theme', 'polaroids'];
+    const types: StateType[] = ['person', 'senders', 'theme', 'polaroids', 'court'];
     types.forEach(type => {
       try {
         realtimeSyncManager.subscribe(type, (data) => {
@@ -57,6 +57,7 @@ class GlobalStateManager {
       'chaarYaarSenders':  'senders',
       'chaarYaarTheme':    'theme',
       'chaarYaarPolaroids': 'polaroids',
+      'chaarYaarCourt': 'court',
     };
     return mapping[key] || null;
   }
@@ -67,6 +68,7 @@ class GlobalStateManager {
       'senders':  'chaarYaarSenders',
       'theme':    'chaarYaarTheme',
       'polaroids': 'chaarYaarPolaroids',
+      'court': 'chaarYaarCourt',
     };
     return mapping[type];
   }
@@ -165,7 +167,7 @@ class GlobalStateManager {
   }
 
   async broadcastAll(): Promise<void> {
-    const types: StateType[] = ['person', 'senders', 'theme', 'polaroids'];
+    const types: StateType[] = ['person', 'senders', 'theme', 'polaroids', 'court'];
     await Promise.all(
       types.map(type => {
         const key = this.getKeyFromStateType(type);
