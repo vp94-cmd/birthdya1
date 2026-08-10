@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { X, Lock, Save, LogOut, Plus, Trash2, Wifi, WifiOff } from 'lucide-react';
-import { BirthdayPerson, Sender, PolaroidImage, defaultBirthdayPerson, defaultSenders, defaultPolaroids } from '../types';
+import { BirthdayPerson, Sender, PolaroidImage, Charge, CourtMember, defaultBirthdayPerson, defaultSenders, defaultPolaroids, defaultCharges, defaultCourtMembers } from '../types';
 import { globalStateManager } from '../lib/globalStateManager';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
@@ -18,6 +18,8 @@ export default function AdminPanel({ isOpen, onClose }: { isOpen: boolean, onClo
   const [senders, setSenders] = useState<Sender[]>(defaultSenders);
   const [theme, setTheme] = useState<'classic' | 'retro'>('classic');
   const [polaroids, setPolaroids] = useState<PolaroidImage[]>(defaultPolaroids);
+  const [charges, setCharges] = useState<Charge[]>(defaultCharges);
+  const [courtMembers, setCourtMembers] = useState<CourtMember[]>(defaultCourtMembers);
 
   useEffect(() => {
     if (localStorage.getItem('chaarYaarAdminAuth') === 'true') {
@@ -37,6 +39,15 @@ export default function AdminPanel({ isOpen, onClose }: { isOpen: boolean, onClo
 
     const savedPolaroids = localStorage.getItem('chaarYaarPolaroids');
     if (savedPolaroids) setPolaroids(JSON.parse(savedPolaroids));
+
+    const savedCourt = localStorage.getItem('chaarYaarCourt');
+    if (savedCourt) {
+      try {
+        const d = JSON.parse(savedCourt);
+        if (d.charges?.length) setCharges(d.charges);
+        if (d.members?.length) setCourtMembers(d.members);
+      } catch (_) {}
+    }
   }, [isOpen]);
 
   // Monitor real-time connection status
@@ -69,13 +80,14 @@ export default function AdminPanel({ isOpen, onClose }: { isOpen: boolean, onClo
     setSaveStatus('saving');
     
     try {
-      const config = { person, senders, theme, polaroids };
+      const config = { person, senders, theme, polaroids, court: { charges, members: courtMembers } };
 
       // 1. Save to localStorage immediately (instant local update)
       localStorage.setItem('chaarYaarPerson', JSON.stringify(person));
       localStorage.setItem('chaarYaarSenders', JSON.stringify(senders));
       localStorage.setItem('chaarYaarTheme', theme);
       localStorage.setItem('chaarYaarPolaroids', JSON.stringify(polaroids));
+      localStorage.setItem('chaarYaarCourt', JSON.stringify({ charges, members: courtMembers }));
 
       // 2. Persist to Netlify DB via API function (survives page refresh for all users)
       // Wrapped in try/catch — endpoint is optional on static deployments (Supabase handles persistence)
@@ -83,7 +95,7 @@ export default function AdminPanel({ isOpen, onClose }: { isOpen: boolean, onClo
         const res = await fetch('/api/config', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(config),
+          body: JSON.stringify({ ...config, court: { charges, members: courtMembers } }),
         });
         if (!res.ok) console.debug('[AdminPanel] /api/config unavailable, using Supabase only.');
       } catch (_) { /* static deployment — expected */ }
@@ -442,6 +454,108 @@ export default function AdminPanel({ isOpen, onClose }: { isOpen: boolean, onClo
                     </div>
                   </div>
                   
+                  {/* ── Chaar Yaar Adalat Section ── */}
+                  <div className="space-y-5 mt-2">
+                    <h3 className="text-lg font-bold text-white border-b border-slate-800 pb-3 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-yellow-500" />
+                      Chaar Yaar Adalat
+                    </h3>
+
+                    {/* Charges */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-mono uppercase tracking-wider text-slate-400">📋 Ilzaam (Charges)</p>
+                        <button
+                          onClick={() => setCharges([...charges, { id: `c${Date.now()}`, year: new Date().getFullYear().toString(), crime: '', evidence: '', severity: 'Minor' as const }])}
+                          className="flex items-center gap-1 text-xs px-3 py-1.5 bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 rounded-lg border border-yellow-600/30 transition-colors"
+                        >
+                          <Plus className="w-3 h-3" /> Naya Ilzaam
+                        </button>
+                      </div>
+                      {charges.map((charge, idx) => (
+                        <div key={charge.id} className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-mono text-slate-500">Ilzaam #{idx + 1}</span>
+                            <button onClick={() => setCharges(charges.filter(c => c.id !== charge.id))} className="text-red-500 hover:text-red-400 transition-colors">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-mono uppercase text-slate-500">Saal</label>
+                              <input type="text" value={charge.year}
+                                onChange={e => setCharges(charges.map(c => c.id === charge.id ? {...c, year: e.target.value} : c))}
+                                placeholder="2022"
+                                className="w-full bg-slate-950 border border-slate-700/80 rounded-md px-3 py-2 text-white text-xs focus:outline-none focus:border-yellow-500 transition-colors"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-mono uppercase text-slate-500">Severity</label>
+                              <select value={charge.severity}
+                                onChange={e => setCharges(charges.map(c => c.id === charge.id ? {...c, severity: e.target.value as Charge['severity']} : c))}
+                                className="w-full bg-slate-950 border border-slate-700/80 rounded-md px-3 py-2 text-white text-xs focus:outline-none focus:border-yellow-500 transition-colors"
+                              >
+                                <option value="Minor">Minor</option>
+                                <option value="Serious">Serious</option>
+                                <option value="Heinous">Heinous</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-mono uppercase text-slate-500">Ilzaam (Crime)</label>
+                            <input type="text" value={charge.crime}
+                              onChange={e => setCharges(charges.map(c => c.id === charge.id ? {...c, crime: e.target.value} : c))}
+                              placeholder="Pizza khake bill se bhaag gaya..."
+                              className="w-full bg-slate-950 border border-slate-700/80 rounded-md px-3 py-2 text-white text-xs focus:outline-none focus:border-yellow-500 transition-colors"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-mono uppercase text-slate-500">Saboot (Evidence)</label>
+                            <input type="text" value={charge.evidence}
+                              onChange={e => setCharges(charges.map(c => c.id === charge.id ? {...c, evidence: e.target.value} : c))}
+                              placeholder="3 gawah aur ek khali tub..."
+                              className="w-full bg-slate-950 border border-slate-700/80 rounded-md px-3 py-2 text-white text-xs focus:outline-none focus:border-yellow-500 transition-colors"
+                            />
+                          </div>
+                        </div>
+                      ))}
+                      {charges.length === 0 && (
+                        <div className="text-center text-slate-600 text-xs font-mono py-4 border border-dashed border-slate-800 rounded-xl">
+                          Koi ilzaam nahi — "Naya Ilzaam" button se add karo
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Court Members */}
+                    <div className="space-y-3">
+                      <p className="text-xs font-mono uppercase tracking-wider text-slate-400">🏛️ Adalat ke Sadsya</p>
+                      {courtMembers.map((member) => (
+                        <div key={member.role} className="bg-slate-900/40 border border-slate-800/60 rounded-xl p-4 space-y-3">
+                          <span className="text-xs font-bold text-yellow-400 font-mono">{member.role}</span>
+                          <div className="space-y-2">
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-mono uppercase text-slate-500">Naam</label>
+                              <input type="text" value={member.name}
+                                onChange={e => setCourtMembers(courtMembers.map(m => m.role === member.role ? {...m, name: e.target.value} : m))}
+                                placeholder="Adv. Ashish..."
+                                className="w-full bg-slate-950 border border-slate-700/80 rounded-md px-3 py-2 text-white text-xs focus:outline-none focus:border-yellow-500 transition-colors"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] font-mono uppercase text-slate-500">Bayan (Statement)</label>
+                              <textarea value={member.verdict}
+                                onChange={e => setCourtMembers(courtMembers.map(m => m.role === member.role ? {...m, verdict: e.target.value} : m))}
+                                placeholder="Mulzim clearly guilty hai milord..."
+                                rows={2}
+                                className="w-full bg-slate-950 border border-slate-700/80 rounded-md px-3 py-2 text-white text-xs focus:outline-none focus:border-yellow-500 transition-colors leading-relaxed"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Footer Actions */}
                   <div className="flex justify-end pt-6 border-t border-slate-800/80 sticky bottom-0 bg-[#0b1120] pb-2 z-10">
                     <button 

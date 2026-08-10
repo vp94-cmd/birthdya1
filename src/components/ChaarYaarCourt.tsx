@@ -1,6 +1,7 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { globalAudio } from '../App';
+import { globalStateManager } from '../lib/globalStateManager';
 
 // ── Court Sound Engine ────────────────────────────────────────────────────────
 function useCourtSounds(muted: boolean) {
@@ -124,10 +125,32 @@ const roleIcon: Record<CourtMember['role'], string> = {
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function ChaarYaarCourt({
   birthdayName,
-  charges  = defaultCharges,
-  members  = defaultMembers,
-}: ChaarYaarCourtProps) {
-  const [muted, setMuted]       = useState(false);
+}: { birthdayName: string }) {
+  const [muted, setMuted] = useState(false);
+
+  const [charges, setCharges] = useState<Charge[]>(() => {
+    try {
+      const s = localStorage.getItem('chaarYaarCourt');
+      if (s) { const d = JSON.parse(s); if (d.charges?.length) return d.charges; }
+    } catch (_) {}
+    return defaultCharges;
+  });
+
+  const [members, setMembers] = useState<CourtMember[]>(() => {
+    try {
+      const s = localStorage.getItem('chaarYaarCourt');
+      if (s) { const d = JSON.parse(s); if (d.members?.length) return d.members; }
+    } catch (_) {}
+    return defaultMembers;
+  });
+
+  useEffect(() => {
+    const unsub = globalStateManager.subscribe('court', (data: any) => {
+      if (data?.charges) setCharges(data.charges);
+      if (data?.members) setMembers(data.members);
+    });
+    return unsub;
+  }, []);
   const [phase, setPhase]       = useState<'intro' | 'charges' | 'members' | 'verdict'>('intro');
   const [activeCharge, setActiveCharge]   = useState(0);
   const [hammerSlam, setHammerSlam]       = useState(false);
