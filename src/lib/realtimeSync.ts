@@ -112,7 +112,7 @@ class RealtimeSyncManager {
     try {
       const { data, error } = await supabase
         .from('site_config')
-        .select('person, senders, theme, polaroids')
+        .select('person, senders, theme, polaroids, court')
         .eq('id', CONFIG_ROW_ID)
         .single();
 
@@ -125,7 +125,7 @@ class RealtimeSyncManager {
       }
       if (!data) return;
 
-      (['person', 'senders', 'theme', 'polaroids'] as StateType[]).forEach((type) => {
+      (['person', 'senders', 'theme', 'polaroids', 'court'] as StateType[]).forEach((type) => {
         const raw = data[type as keyof typeof data];
         if (raw === undefined || raw === null) return;
         try {
@@ -169,20 +169,26 @@ class RealtimeSyncManager {
     senders: any;
     theme: string;
     polaroids: any;
+    court?: any;
   }): Promise<void> {
     if (!supabase) {
       console.warn('saveToDatabase: Supabase unavailable — DB write skipped.');
       return;
     }
 
+    const updatePayload: Record<string, any> = {
+      person:   JSON.stringify(config.person),
+      senders:  JSON.stringify(config.senders),
+      theme:    config.theme,
+      polaroids: JSON.stringify(config.polaroids),
+    };
+    if (config.court !== undefined) {
+      updatePayload.court = JSON.stringify(config.court);
+    }
+
     const { error } = await supabase
       .from('site_config')
-      .update({
-        person:   JSON.stringify(config.person),
-        senders:  JSON.stringify(config.senders),
-        theme:    config.theme,
-        polaroids: JSON.stringify(config.polaroids),
-      })
+      .update(updatePayload)
       .eq('id', CONFIG_ROW_ID);
 
     if (error) {
@@ -236,6 +242,7 @@ class RealtimeSyncManager {
       senders:  'chaarYaarSenders',
       theme:    'chaarYaarTheme',
       polaroids: 'chaarYaarPolaroids',
+      court:    'chaarYaarCourt',
     };
     return mapping[type];
   }

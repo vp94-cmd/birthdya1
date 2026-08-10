@@ -141,29 +141,40 @@ class GlobalStateManager {
     senders: any;
     theme: string;
     polaroids: any;
+    court?: any;
   }): Promise<void> {
     // 1. Save to localStorage immediately (instant local update)
     localStorage.setItem('chaarYaarPerson',   JSON.stringify(config.person));
     localStorage.setItem('chaarYaarSenders',  JSON.stringify(config.senders));
     localStorage.setItem('chaarYaarTheme',    config.theme);
     localStorage.setItem('chaarYaarPolaroids', JSON.stringify(config.polaroids));
+    if (config.court !== undefined) {
+      localStorage.setItem('chaarYaarCourt', JSON.stringify(config.court));
+    }
 
     // 2. Persist to Supabase DB (survives refresh, visible to all users)
     await realtimeSyncManager.saveToDatabase(config);
 
     // 3. Broadcast live update to all connected browser tabs/clients
-    await Promise.all([
+    const broadcasts = [
       realtimeSyncManager.broadcast('person',   config.person),
       realtimeSyncManager.broadcast('senders',  config.senders),
       realtimeSyncManager.broadcast('theme',    config.theme),
       realtimeSyncManager.broadcast('polaroids', config.polaroids),
-    ]);
+    ];
+    if (config.court !== undefined) {
+      broadcasts.push(realtimeSyncManager.broadcast('court', config.court));
+    }
+    await Promise.all(broadcasts);
 
     // 4. Notify local listeners directly (same tab, no round-trip needed)
     this.notifyListeners('person',   config.person);
     this.notifyListeners('senders',  config.senders);
     this.notifyListeners('theme',    config.theme);
     this.notifyListeners('polaroids', config.polaroids);
+    if (config.court !== undefined) {
+      this.notifyListeners('court', config.court);
+    }
   }
 
   async broadcastAll(): Promise<void> {
