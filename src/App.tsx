@@ -72,8 +72,11 @@ export default function App() {
     }
     if (globalAudio.paused) {
       globalAudio.volume = 1.0;
-      globalAudio.play().catch(() => {});
-      audioHasPlayed.current = true;
+      globalAudio.play()
+        .then(() => { audioHasPlayed.current = true; })
+        .catch(() => {
+          // Browser blocked autoplay — don't set flag so next interaction retries
+        });
     } else if (forceRestart) {
       globalAudio.currentTime = timestamp;
     }
