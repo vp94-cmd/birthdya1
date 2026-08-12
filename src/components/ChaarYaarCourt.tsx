@@ -19,6 +19,8 @@ function useCourtSounds(muted: boolean) {
     if (muted) return;
     const c = getCtx();
     if (!c) return;
+    // Resume if browser suspended the context (autoplay policy)
+    if (c.state === 'suspended') { c.resume(); }
 
     const now = c.currentTime;
 
