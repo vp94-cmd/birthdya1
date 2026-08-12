@@ -2,11 +2,24 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, useInView, PanInfo, useMotionValue, useTransform, animate } from 'motion/react';
 import { PolaroidImage } from '../types';
 
+// Shared AudioContext — created once, reused for every pop sound
+let _sharedCtx: AudioContext | null = null;
+const getSharedCtx = (): AudioContext | null => {
+  if (_sharedCtx && _sharedCtx.state !== 'closed') return _sharedCtx;
+  try {
+    const AC = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AC) return null;
+    _sharedCtx = new AC();
+    return _sharedCtx;
+  } catch (_) { return null; }
+};
+
 const playPopSound = (pitch = 150) => {
   try {
-    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-    if (!AudioContext) return;
-    const ctx = new AudioContext();
+    const ctx = getSharedCtx();
+    if (!ctx) return;
+    // Resume if suspended (browser autoplay policy)
+    if (ctx.state === 'suspended') ctx.resume();
     const osc = ctx.createOscillator();
     const gainNode = ctx.createGain();
     osc.type = 'sine';
